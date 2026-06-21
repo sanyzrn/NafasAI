@@ -21,7 +21,7 @@ const DEPTH_CONFIG: Record<Depth, { label: string; time: string; maxTokens: numb
 };
 
 export default function DeepSearchView() {
-  const { selectedProviderId, selectedModelId, createConversation, addMessage } = useAppStore();
+  const { selectedProviderId, selectedModelId, createConversation, addMessage, aiConfig } = useAppStore();
   const [query, setQuery] = useState('');
   const [sources, setSources] = useState<Source[]>(['web', 'academic']);
   const [depth, setDepth] = useState<Depth>('standard');
@@ -74,6 +74,7 @@ export default function DeepSearchView() {
         model: selectedModelId,
         system: systemPrompt,
         maxTokens: DEPTH_CONFIG[depth].maxTokens,
+        temperature: aiConfig.temperature,
       }, { signal: abortRef.current.signal });
 
       setSearchTime(parseFloat(((Date.now() - start) / 1000).toFixed(1)));

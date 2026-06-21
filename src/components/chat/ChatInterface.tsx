@@ -30,9 +30,10 @@ function TypingIndicator() {
 
 import ReactMarkdown from 'react-markdown';
 
-function MessageBubble({ message, isLast }: {
+function MessageBubble({ message, isLast, onRegenerate }: {
   message: { id: string; role: string; content: string; timestamp: Date };
   isLast: boolean;
+  onRegenerate?: () => void;
 }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
@@ -83,8 +84,12 @@ function MessageBubble({ message, isLast }: {
             >
               <ThumbsDown className="w-3 h-3" />
             </button>
-            {isLast && (
-              <button className="p-1 rounded-md text-gray-400 dark:text-[#4b5563] hover:text-gray-700 dark:hover:text-[#9ca3af] hover:bg-gray-100 dark:hover:bg-[#1a1a1a] transition">
+            {isLast && onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                title="Regenerate response"
+                className="p-1 rounded-md text-gray-400 dark:text-[#4b5563] hover:text-gray-700 dark:hover:text-[#9ca3af] hover:bg-gray-100 dark:hover:bg-[#1a1a1a] transition"
+              >
                 <RotateCcw className="w-3 h-3" />
               </button>
             )}
@@ -124,6 +129,7 @@ export default function ChatInterface() {
     setSelectedProvider,
     setSelectedModel,
     loadMessages,
+    truncateToLastUser,
   } = useAppStore();
 
   const [input, setInput] = useState('');
@@ -132,6 +138,7 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
 
   const activeProviders = providers.filter((p) => p.isActive);
   const currentProvider = providers.find((p) => p.id === selectedProviderId);
@@ -150,6 +157,17 @@ export default function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  useEffect(() => {
+    if (!showModelPicker) return;
+    const onDown = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showModelPicker]);
+
   const autoResize = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -157,36 +175,14 @@ export default function ChatInterface() {
     }
   };
 
-  const handleSend = async (content?: string) => {
-    const text = (content ?? input).trim();
-    if (!text || isGenerating) return;
-
-    let convId = activeConversationId;
-    if (!convId) {
-      convId = createConversation('chat');
-      setActiveConversation(convId);
-    }
-
-    // Snapshot existing messages before adding the new one
-    const existingMessages = conversations.find((c) => c.id === convId)?.messages ?? [];
-    const apiMessages = [
-      ...existingMessages.map((m) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: text },
-    ];
-
-    // Derive title for new conversations (first message becomes the title)
-    const isFirstMessage  = existingMessages.length === 0;
-    const conversationTitle = isFirstMessage
-      ? text.slice(0, 45) + (text.length > 45 ? '…' : '')
-      : (conversations.find((c) => c.id === convId)?.title ?? 'New conversation');
-
-    setInput('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    addMessage(convId, { role: 'user', content: text });
-
+  // Shared generation routine used by both initial sends and regeneration.
+  const runGeneration = async (
+    convId: string,
+    apiMessages: { role: string; content: string }[],
+    conversationTitle: string,
+  ) => {
     setIsGenerating(true);
     setIsTyping(true);
-
     abortControllerRef.current = new AbortController();
 
     try {
@@ -200,6 +196,9 @@ export default function ChatInterface() {
         model: selectedModelId || 'claude-3-7-sonnet-20250219',
         system: aiConfig.systemPrompt,
         maxTokens: aiConfig.maxTokens,
+        temperature: aiConfig.temperature,
+        tone: aiConfig.tone,
+        verbosity: aiConfig.verbosity,
       }, { signal: abortControllerRef.current.signal });
 
       const data = await res.json();
@@ -231,6 +230,51 @@ export default function ChatInterface() {
       setIsGenerating(false);
       setIsTyping(false);
     }
+  };
+
+  const handleSend = async (content?: string) => {
+    const text = (content ?? input).trim();
+    if (!text || isGenerating) return;
+
+    let convId = activeConversationId;
+    if (!convId) {
+      convId = createConversation('chat');
+      setActiveConversation(convId);
+    }
+
+    // Snapshot existing messages before adding the new one
+    const existingMessages = conversations.find((c) => c.id === convId)?.messages ?? [];
+    const apiMessages = [
+      ...existingMessages.map((m) => ({ role: m.role, content: m.content })),
+      { role: 'user', content: text },
+    ];
+
+    // Derive title for new conversations (first message becomes the title)
+    const isFirstMessage  = existingMessages.length === 0;
+    const conversationTitle = isFirstMessage
+      ? text.slice(0, 45) + (text.length > 45 ? '…' : '')
+      : (conversations.find((c) => c.id === convId)?.title ?? 'New conversation');
+
+    setInput('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    addMessage(convId, { role: 'user', content: text });
+
+    await runGeneration(convId, apiMessages, conversationTitle);
+  };
+
+  // Re-run the model on the last user message, replacing the previous answer.
+  const handleRegenerate = async () => {
+    if (isGenerating || !activeConversationId) return;
+    const conv = conversations.find((c) => c.id === activeConversationId);
+    if (!conv) return;
+
+    const trimmed = [...conv.messages];
+    while (trimmed.length && trimmed[trimmed.length - 1].role === 'assistant') trimmed.pop();
+    if (trimmed.length === 0) return;
+
+    truncateToLastUser(activeConversationId);
+    const apiMessages = trimmed.map((m) => ({ role: m.role, content: m.content }));
+    await runGeneration(activeConversationId, apiMessages, conv.title);
   };
 
   const handleStop = () => {
@@ -269,7 +313,7 @@ export default function ChatInterface() {
 
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Model picker */}
-          <div className="relative">
+          <div className="relative" ref={modelPickerRef}>
             <button
               onClick={() => setShowModelPicker((v) => !v)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-[#1f1f1f] text-xs font-medium text-gray-600 dark:text-[#9ca3af] hover:bg-gray-50 dark:hover:bg-[#1a1a1a] transition"
@@ -387,6 +431,7 @@ export default function ChatInterface() {
                 key={message.id}
                 message={message}
                 isLast={idx === messages.length - 1 && message.role === 'assistant'}
+                onRegenerate={handleRegenerate}
               />
             ))}
             {isTyping && <TypingIndicator />}

@@ -1,7 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Users, MessageSquare, Activity, TrendingUp, Shield } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
+import { apiFetch } from '../../utils/api';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+interface Stats {
+  daily: { date: string; requests: number }[];
+  monthly: { month: string; requests: number }[];
+  tools: { name: string; value: number }[];
+  totalConversations: number;
+  totalMessages: number;
+}
 
 const darkTooltipStyle = {
   backgroundColor: '#161616',
@@ -39,23 +48,30 @@ function EmptyChart({ label }: { label: string }) {
 
 export default function AdminOverview() {
   const { users, conversations, aiConfig, loadUsers } = useAppStore();
+  const [stats, setStats] = useState<Stats | null>(null);
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => {
+    loadUsers();
+    (async () => {
+      try {
+        const res = await apiFetch({ action: 'stats.get' });
+        const data = await res.json();
+        if (data.stats) setStats(data.stats);
+      } catch { /* apiFetch surfaces a toast on failure */ }
+    })();
+  }, []);
 
-  const activeUsers  = users.filter((u) => u.isActive).length;
+  const activeUsers   = users.filter((u) => u.isActive).length;
   const totalRequests = users.reduce((acc, u) => acc + (u.usageCount ?? 0), 0);
-  const totalConvs   = conversations.length;
+  const totalConvs    = stats?.totalConversations ?? conversations.length;
+  const totalMessages = stats?.totalMessages ?? 0;
 
-  // Derive per-tool usage from conversations
-  const toolCounts = conversations.reduce<Record<string, number>>((acc, c) => {
-    const key = c.tool ?? 'chat';
-    acc[key] = (acc[key] ?? 0) + 1;
-    return acc;
-  }, {});
-  const toolUsage = Object.entries(toolCounts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
+  const dailyData = (stats?.daily ?? []).map((d) => ({
+    label: d.date.slice(5), // MM-DD
+    requests: d.requests,
+  }));
+
+  const toolUsage = (stats?.tools ?? []).map((t) => ({ name: t.name, value: t.value })).slice(0, 6);
 
   const getInitials = (name: string) => name.split(' ').map((n) => n[0]).join('').toUpperCase();
 
@@ -82,17 +98,28 @@ export default function AdminOverview() {
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="Active Users"    value={String(activeUsers)}          icon={Users}        />
+          <StatCard label="Active Users"    value={String(activeUsers)}            icon={Users}        />
           <StatCard label="Total Requests"  value={totalRequests.toLocaleString()} icon={MessageSquare} />
-          <StatCard label="Conversations"   value={String(totalConvs)}            icon={Activity}     />
-          <StatCard label="Uptime"          value="99.9%"                          icon={TrendingUp}   />
+          <StatCard label="Conversations"   value={String(totalConvs)}             icon={Activity}     />
+          <StatCard label="Messages"        value={totalMessages.toLocaleString()} icon={TrendingUp}   />
         </div>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 bg-white dark:bg-[#111111] rounded-xl border border-gray-100 dark:border-[#1f1f1f] p-5">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-[#6b7280] uppercase tracking-wider mb-4">Daily Requests</h3>
-            <EmptyChart label="Usage data will populate as the platform is used." />
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-[#6b7280] uppercase tracking-wider mb-4">Daily Requests (last 14 days)</h3>
+            {dailyData.some((d) => d.requests > 0) ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={dailyData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#4b5563' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: '#4b5563' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={darkTooltipStyle} formatter={(v) => [v, 'Requests']} />
+                  <Bar dataKey="requests" fill="#b61615" radius={[3, 3, 0, 0]} barSize={14} opacity={0.85} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChart label="Usage data will populate as the platform is used." />
+            )}
           </div>
 
           <div className="bg-white dark:bg-[#111111] rounded-xl border border-gray-100 dark:border-[#1f1f1f] p-5">
