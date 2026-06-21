@@ -231,18 +231,43 @@ function writeAuditLog(string $action, string $target): void {
 }
 
 function encryptKey(string $key): string {
-    if (empty($key)) return '';
-    $iv = openssl_random_pseudo_bytes(openssl_cipher_iv_length('aes-256-cbc'));
-    $encrypted = openssl_encrypt($key, 'aes-256-cbc', substr(hash('sha256', JWT_SECRET), 0, 32), 0, $iv);
-    return base64_encode($iv . '::' . $encrypted);
+    if ($key === '') return '';
+    $ivLen  = openssl_cipher_iv_length('aes-256-cbc');
+    $iv     = openssl_random_pseudo_bytes($ivLen);
+    $cipher = openssl_encrypt($key, 'aes-256-cbc', substr(hash('sha256', JWT_SECRET), 0, 32), OPENSSL_RAW_DATA, $iv);
+    if ($cipher === false) return '';
+    // Prepend the raw IV and base64 the whole blob. No text delimiter is used, so a
+    // random IV byte can never collide with a separator and corrupt the payload.
+    return 'v2:' . base64_encode($iv . $cipher);
 }
 
 function decryptKey(string $payload): string {
-    if (empty($payload)) return '';
-    $decoded = base64_decode($payload);
-    if ($decoded === false || strpos($decoded, '::') === false) return $payload; // clear text fallback
-    list($iv, $encrypted) = explode('::', $decoded, 2);
-    return openssl_decrypt($encrypted, 'aes-256-cbc', substr(hash('sha256', JWT_SECRET), 0, 32), 0, $iv) ?: '';
+    if ($payload === '') return '';
+    $secret = substr(hash('sha256', JWT_SECRET), 0, 32);
+    $ivLen  = openssl_cipher_iv_length('aes-256-cbc');
+
+    // Current format: "v2:" . base64(iv . rawCipher)
+    if (strncmp($payload, 'v2:', 3) === 0) {
+        $raw = base64_decode(substr($payload, 3), true);
+        if ($raw === false || strlen($raw) <= $ivLen) return '';
+        $iv     = substr($raw, 0, $ivLen);
+        $cipher = substr($raw, $ivLen);
+        $out    = openssl_decrypt($cipher, 'aes-256-cbc', $secret, OPENSSL_RAW_DATA, $iv);
+        return $out === false ? '' : $out;
+    }
+
+    // Legacy format: base64(iv . '::' . base64Cipher) — read-only for migration.
+    $decoded = base64_decode($payload, true);
+    if ($decoded !== false && strpos($decoded, '::') !== false) {
+        [$iv, $encrypted] = explode('::', $decoded, 2);
+        if (strlen($iv) === $ivLen) {
+            $out = @openssl_decrypt($encrypted, 'aes-256-cbc', $secret, 0, $iv);
+            if ($out !== false) return $out;
+        }
+    }
+
+    // Clear-text fallback (keys stored before encryption was introduced).
+    return $payload;
 }
 
 function createToken(string $id, string $role, array $permissions): string {
@@ -929,7 +954,8 @@ function handleConfigGet(): void {
         foreach ($defaultProviders as &$dp) {
             foreach ($dbProviders as $dbp) {
                 if ($dbp['id'] === $dp['id']) {
-                    $dp['apiKey'] = preg_replace('/./', '*', $dbp['apiKey'] ?? ''); // Mask all DB keys
+                    // Mask saved keys with a fixed-length placeholder (never leak the real length).
+                    $dp['apiKey'] = !empty($dbp['apiKey']) ? str_repeat('*', 12) : '';
                     if ($dp['id'] === 'custom') {
                         $dp['baseUrl'] = $dbp['baseUrl'] ?? $dp['baseUrl'];
                         $dp['isActive'] = !empty($dbp['apiKey']) && !empty($dbp['baseUrl']);
@@ -1072,10 +1098,22 @@ function handleProvidersTest(array $body): void {
     } else {
         // OpenAI, OpenRouter, custom
         $url = '';
-        if ($provider === 'openai') $url = 'https://api.openai.com/v1/models';
-        elseif ($provider === 'openrouter') $url = 'https://openrouter.ai/api/v1/models';
-        elseif ($provider === 'custom') $url = rtrim($baseUrl, '/chat/completions') . '/models'; // naive attempt
-        
+        if ($provider === 'openai') {
+            $url = 'https://api.openai.com/v1/models';
+        } elseif ($provider === 'openrouter') {
+            // /key requires authentication, so it actually validates the key
+            // (the public /models endpoint returns 200 even with an invalid key).
+            $url = 'https://openrouter.ai/api/v1/key';
+        } elseif ($provider === 'custom') {
+            // Derive the /models endpoint from the configured chat URL. Use a suffix
+            // replacement — rtrim() with a char-list would strip unrelated characters.
+            $trimmed = rtrim($baseUrl, '/');
+            if (str_ends_with($trimmed, '/chat/completions')) {
+                $trimmed = substr($trimmed, 0, -strlen('/chat/completions'));
+            }
+            $url = rtrim($trimmed, '/') . '/models';
+        }
+
         if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
              respond(400, ['error' => 'Invalid or missing base URL']);
         }
@@ -1094,15 +1132,28 @@ function handleProvidersTest(array $body): void {
     
     if (!$ch) respond(400, ['error' => 'Invalid provider']);
 
-    $res = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $res     = curl_exec($ch);
+    $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
     curl_close($ch);
-    
+
+    if ($res === false || $curlErr) {
+        respond(502, ['error' => 'Could not reach the provider (connection failed or timed out).']);
+    }
+
     if ($status === 200) {
         respond(200, ['success' => true]);
-    } else {
-        respond(400, ['error' => "Provider test failed. HTTP $status"]);
     }
+
+    // Surface the provider's own error message so the cause is visible to the admin.
+    $data = json_decode($res, true);
+    $msg  = $data['error']['message'] ?? ($data['error'] ?? null);
+    if (!is_string($msg) || $msg === '') {
+        $msg = $status === 401 || $status === 403
+            ? 'Invalid API key (authentication rejected).'
+            : "Provider test failed (HTTP {$status}).";
+    }
+    respond(400, ['error' => $msg]);
 }
 
 // ── User management handlers ──────────────────────────────────────────────────
