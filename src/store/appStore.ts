@@ -451,39 +451,36 @@ export const useAppStore = create<AppState>()(
           const data = await res.json();
           if (data.config && Object.keys(data.config).length > 0) {
             set((state) => {
-              const newProviders = data.config.providers ?? state.providers;
-              
-              // First, check if global config specifies a default provider
-              let configDefaultProviderId = data.config.defaultProviderId;
-              let nextProviderId = configDefaultProviderId ?? state.selectedProviderId;
-              let providerMatch = newProviders.find((p: ApiProvider) => p.id === nextProviderId && p.isActive);
+              const newProviders: ApiProvider[] = data.config.providers ?? state.providers;
+              const isActive = (id?: string) =>
+                !!id && newProviders.some((p) => p.id === id && p.isActive);
 
-              if (!providerMatch) {
-                // Try finding any active provider
-                providerMatch = newProviders.find((p: ApiProvider) => p.isActive);
-                if (providerMatch) {
-                   nextProviderId = providerMatch.id;
+              // Keep the user's own selection when that provider is still active.
+              // Only fall back to the admin's global default — and then to the first
+              // active provider — when the current selection is no longer valid.
+              // This prevents loadConfig() from resetting the chat back to the
+              // default provider every time it runs (e.g. on each login).
+              let nextProviderId = state.selectedProviderId;
+              if (!isActive(nextProviderId)) {
+                if (isActive(data.config.defaultProviderId)) {
+                  nextProviderId = data.config.defaultProviderId;
+                } else {
+                  const firstActive = newProviders.find((p) => p.isActive);
+                  if (firstActive) nextProviderId = firstActive.id;
                 }
               }
 
-              // Determine the right model to select
-              let nextModelId = state.selectedModelId;
-              if (
-                nextProviderId !== state.selectedProviderId || 
-                (providerMatch && !providerMatch.models.some((m: any) => m.id === nextModelId) && providerMatch.defaultModel !== nextModelId)
-              ) {
-                // Adopt the default model if the provider changed or the current model isn't listed/matched
-                nextModelId = providerMatch ? providerMatch.defaultModel : state.selectedModelId;
-              }
+              const providerMatch = newProviders.find((p) => p.id === nextProviderId);
 
-              // Apply User's new defaultModel from DB if they just saved it in settings!
-              // (Since we want to prefer the db 'defaultModel' over our session's selectedModel
-              // if it doesn't match and we're loading config fresh).
-              if (providerMatch && data.config.providers) {
-                 const dbVal = data.config.providers.find((p: ApiProvider) => p.id === nextProviderId)?.defaultModel;
-                 if (dbVal && dbVal !== nextModelId && !state.selectedModelId) {
-                      nextModelId = dbVal;
-                 }
+              // Preserve the user's chosen model when the provider hasn't changed
+              // (covers custom model ids that aren't in the listed models). Otherwise
+              // adopt the selected provider's default model.
+              let nextModelId = state.selectedModelId;
+              const keepModel =
+                (nextProviderId === state.selectedProviderId && !!nextModelId) ||
+                !!providerMatch?.models.some((m) => m.id === nextModelId);
+              if (!keepModel) {
+                nextModelId = providerMatch ? providerMatch.defaultModel : state.selectedModelId;
               }
 
               return {
