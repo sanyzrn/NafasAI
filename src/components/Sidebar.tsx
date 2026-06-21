@@ -21,6 +21,7 @@ import {
   Edit3,
   Zap,
   Plug,
+  ScrollText,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore, Conversation, NavView } from '../store/appStore';
@@ -39,6 +40,7 @@ const adminNavItems = [
   { id: 'admin-tools' as NavView, label: 'Tool Access', icon: Sliders },
   { id: 'admin-usage' as NavView, label: 'Usage & Limits', icon: Activity },
   { id: 'admin-providers' as NavView, label: 'API Providers', icon: Plug },
+  { id: 'admin-logs' as NavView, label: 'System Logs', icon: ScrollText },
   { id: 'admin-settings' as NavView, label: 'Settings', icon: Settings },
 ];
 

@@ -41,6 +41,22 @@ if ($origin) {
 $DATA_DIR  = __DIR__ . '/data/';
 $DATA_FILE = $DATA_DIR . 'users.json';
 
+// Log uncaught exceptions and fatal errors so the admin can diagnose failures.
+set_exception_handler(function (\Throwable $e) {
+    logEvent('error', 'uncaught', $e->getMessage(), ['file' => $e->getFile(), 'line' => $e->getLine()]);
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['error' => 'Internal server error.']);
+});
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        logEvent('error', 'fatal', $err['message'], ['file' => $err['file'], 'line' => $err['line']]);
+    }
+});
+
 initData($DATA_FILE, $DATA_DIR);
 
 $body   = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -116,6 +132,12 @@ switch ($action) {
     case 'providers.test':
         requireAdmin(); handleProvidersTest($body);
         break;
+    case 'logs.list':
+        requireAdmin(); handleLogsList($body);
+        break;
+    case 'logs.clear':
+        requireAdmin(); handleLogsClear();
+        break;
     default:
         respond(404, ['error' => 'Unknown action.']);
 }
@@ -145,6 +167,7 @@ function getDB(): PDO {
         }
     } catch (\Throwable $e) {
         error_log('[Nafas AI] DB connection failed: ' . $e->getMessage());
+        logEvent('error', 'db', 'Database connection failed', ['detail' => $e->getMessage()]);
         respond(500, ['error' => 'Database connection failed.']);
     }
     return $pdo;
@@ -228,6 +251,61 @@ function writeAuditLog(string $action, string $target): void {
         }
         fclose($fp);
     }
+}
+
+/**
+ * Append a structured entry to the application log (JSON-lines).
+ * Levels: info | warn | error. Rotates once the file passes ~1 MB.
+ */
+function logEvent(string $level, string $context, string $message, array $extra = []): void {
+    $dir = $GLOBALS['DATA_DIR'] ?? (__DIR__ . '/data/');
+    if (!is_dir($dir)) { @mkdir($dir, 0750, true); }
+    $file = $dir . 'app.log';
+
+    if (is_file($file) && filesize($file) > 1048576) {
+        @rename($file, $dir . 'app.log.1');
+    }
+
+    $entry = [
+        'time'    => date('c'),
+        'level'   => $level,
+        'context' => $context,
+        'message' => mb_substr($message, 0, 2000),
+        'actor'   => $GLOBALS['currentAuth']['id'] ?? null,
+        'extra'   => $extra,
+    ];
+    $line = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR) . "\n";
+
+    $fp = @fopen($file, 'a');
+    if ($fp) {
+        if (flock($fp, LOCK_EX)) { fwrite($fp, $line); flock($fp, LOCK_UN); }
+        fclose($fp);
+    }
+}
+
+function handleLogsList(array $body): void {
+    global $DATA_DIR;
+    $limit = min(max((int) ($body['limit'] ?? 200), 1), 1000);
+    $file  = $DATA_DIR . 'app.log';
+
+    $logs = [];
+    if (is_file($file)) {
+        $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $lines = array_slice($lines, -$limit);
+        foreach (array_reverse($lines) as $ln) {
+            $d = json_decode($ln, true);
+            if (is_array($d)) $logs[] = $d;
+        }
+    }
+    respond(200, ['logs' => $logs]);
+}
+
+function handleLogsClear(): void {
+    global $DATA_DIR;
+    @unlink($DATA_DIR . 'app.log');
+    @unlink($DATA_DIR . 'app.log.1');
+    logEvent('info', 'logs', 'Log file cleared by admin.');
+    respond(200, ['success' => true]);
 }
 
 function encryptKey(string $key): string {
@@ -564,17 +642,25 @@ function handleChat(array $body): void {
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
-        $result  = curl_exec($ch);
-        $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
+        $result    = curl_exec($ch);
+        $status    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr   = curl_error($ch);
+        $curlErrno = curl_errno($ch);
         curl_close($ch);
 
-        if ($result === false || $curlErr) {
-            respond(504, ['error' => 'AI service timed out or connection failed.']);
+        if ($result === false || $curlErrno !== 0) {
+            logEvent('error', 'chat', 'Upstream connection failed', [
+                'provider' => $provider, 'model' => $model,
+                'curl_errno' => $curlErrno, 'curl_error' => $curlErr,
+            ]);
+            respond(504, ['error' => 'Could not reach the AI provider: ' . ($curlErr ?: 'connection failed or timed out') . '.']);
         }
         $data = json_decode($result, true);
         if ($status !== 200) {
             $msg = $data['error']['message'] ?? "API error (HTTP {$status}).";
+            logEvent('error', 'chat', 'Provider returned an error response', [
+                'provider' => $provider, 'model' => $model, 'http_status' => $status, 'message' => $msg,
+            ]);
             respond($status >= 500 ? 502 : $status, ['error' => $msg]);
         }
         $assistantContent = $data['content'][0]['text'] ?? '';
@@ -623,17 +709,25 @@ function handleChat(array $body): void {
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
-        $result  = curl_exec($ch);
-        $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
+        $result    = curl_exec($ch);
+        $status    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr   = curl_error($ch);
+        $curlErrno = curl_errno($ch);
         curl_close($ch);
 
-        if ($result === false || $curlErr) {
-            respond(504, ['error' => 'AI service timed out or connection failed.']);
+        if ($result === false || $curlErrno !== 0) {
+            logEvent('error', 'chat', 'Upstream connection failed', [
+                'provider' => $provider, 'model' => $model,
+                'curl_errno' => $curlErrno, 'curl_error' => $curlErr,
+            ]);
+            respond(504, ['error' => 'Could not reach the AI provider: ' . ($curlErr ?: 'connection failed or timed out') . '.']);
         }
         $data = json_decode($result, true);
         if ($status !== 200) {
             $msg = $data['error']['message'] ?? "API error (HTTP {$status}).";
+            logEvent('error', 'chat', 'Provider returned an error response', [
+                'provider' => $provider, 'model' => $model, 'http_status' => $status, 'message' => $msg,
+            ]);
             respond($status >= 500 ? 502 : $status, ['error' => $msg]);
         }
         $assistantContent = $data['choices'][0]['message']['content'] ?? '';
@@ -675,17 +769,25 @@ function handleChat(array $body): void {
             CURLOPT_SSL_VERIFYPEER => true,
         ]);
 
-        $result  = curl_exec($ch);
-        $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
+        $result    = curl_exec($ch);
+        $status    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr   = curl_error($ch);
+        $curlErrno = curl_errno($ch);
         curl_close($ch);
 
-        if ($result === false || $curlErr) {
-            respond(504, ['error' => 'AI service timed out or connection failed.']);
+        if ($result === false || $curlErrno !== 0) {
+            logEvent('error', 'chat', 'Upstream connection failed', [
+                'provider' => $provider, 'model' => $model,
+                'curl_errno' => $curlErrno, 'curl_error' => $curlErr,
+            ]);
+            respond(504, ['error' => 'Could not reach the AI provider: ' . ($curlErr ?: 'connection failed or timed out') . '.']);
         }
         $data = json_decode($result, true);
         if ($status !== 200) {
             $msg = $data['error']['message'] ?? "API error (HTTP {$status}).";
+            logEvent('error', 'chat', 'Provider returned an error response', [
+                'provider' => $provider, 'model' => $model, 'http_status' => $status, 'message' => $msg,
+            ]);
             respond($status >= 500 ? 502 : $status, ['error' => $msg]);
         }
         
@@ -1132,16 +1234,22 @@ function handleProvidersTest(array $body): void {
     
     if (!$ch) respond(400, ['error' => 'Invalid provider']);
 
-    $res     = curl_exec($ch);
-    $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlErr = curl_error($ch);
+    $res       = curl_exec($ch);
+    $status    = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr   = curl_error($ch);
+    $curlErrno = curl_errno($ch);
     curl_close($ch);
 
-    if ($res === false || $curlErr) {
-        respond(502, ['error' => 'Could not reach the provider (connection failed or timed out).']);
+    if ($res === false || $curlErrno !== 0) {
+        logEvent('error', 'providers.test', 'Connection to provider failed', [
+            'provider' => $provider, 'url' => $url ?? null,
+            'curl_errno' => $curlErrno, 'curl_error' => $curlErr,
+        ]);
+        respond(502, ['error' => 'Could not reach the provider: ' . ($curlErr ?: 'connection failed or timed out') . ' (curl ' . $curlErrno . ')']);
     }
 
     if ($status === 200) {
+        logEvent('info', 'providers.test', 'Provider test succeeded', ['provider' => $provider]);
         respond(200, ['success' => true]);
     }
 
@@ -1149,10 +1257,13 @@ function handleProvidersTest(array $body): void {
     $data = json_decode($res, true);
     $msg  = $data['error']['message'] ?? ($data['error'] ?? null);
     if (!is_string($msg) || $msg === '') {
-        $msg = $status === 401 || $status === 403
+        $msg = ($status === 401 || $status === 403)
             ? 'Invalid API key (authentication rejected).'
             : "Provider test failed (HTTP {$status}).";
     }
+    logEvent('warn', 'providers.test', 'Provider test failed', [
+        'provider' => $provider, 'http_status' => $status, 'message' => $msg,
+    ]);
     respond(400, ['error' => $msg]);
 }
 

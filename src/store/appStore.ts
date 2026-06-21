@@ -17,7 +17,8 @@ export type NavView =
   | 'admin-tools'
   | 'admin-usage'
   | 'admin-settings'
-  | 'admin-providers';
+  | 'admin-providers'
+  | 'admin-logs';
 
 export type ProviderId = 'anthropic' | 'openai' | 'google' | 'openrouter' | 'custom';
 
