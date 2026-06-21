@@ -138,6 +138,9 @@ switch ($action) {
     case 'logs.clear':
         requireAdmin(); handleLogsClear();
         break;
+    case 'stats.get':
+        requireAdmin(); handleStatsGet();
+        break;
     default:
         respond(404, ['error' => 'Unknown action.']);
 }
@@ -306,6 +309,46 @@ function handleLogsClear(): void {
     @unlink($DATA_DIR . 'app.log.1');
     logEvent('info', 'logs', 'Log file cleared by admin.');
     respond(200, ['success' => true]);
+}
+
+/** Real usage analytics aggregated from the database (replaces hard-coded charts). */
+function handleStatsGet(): void {
+    $db = getDB();
+    if (!$db) { respond(200, ['stats' => null]); return; }
+
+    try {
+        $daily = $db->query(
+            "SELECT DATE(created_at) d, COUNT(*) c
+             FROM messages
+             WHERE role = 'user' AND created_at >= (CURDATE() - INTERVAL 13 DAY)
+             GROUP BY DATE(created_at) ORDER BY d ASC"
+        )->fetchAll();
+
+        $monthly = $db->query(
+            "SELECT DATE_FORMAT(created_at, '%b') m, DATE_FORMAT(created_at, '%Y-%m') ym, COUNT(*) c
+             FROM messages
+             WHERE role = 'user' AND created_at >= (CURDATE() - INTERVAL 5 MONTH)
+             GROUP BY ym, m ORDER BY ym ASC"
+        )->fetchAll();
+
+        $tools = $db->query(
+            "SELECT tool, COUNT(*) c FROM conversations GROUP BY tool ORDER BY c DESC LIMIT 8"
+        )->fetchAll();
+
+        $totalConversations = (int) $db->query("SELECT COUNT(*) FROM conversations")->fetchColumn();
+        $totalMessages      = (int) $db->query("SELECT COUNT(*) FROM messages")->fetchColumn();
+
+        respond(200, ['stats' => [
+            'daily'   => array_map(fn($r) => ['date' => $r['d'], 'requests' => (int) $r['c']], $daily),
+            'monthly' => array_map(fn($r) => ['month' => $r['m'], 'requests' => (int) $r['c']], $monthly),
+            'tools'   => array_map(fn($r) => ['name' => $r['tool'], 'value' => (int) $r['c']], $tools),
+            'totalConversations' => $totalConversations,
+            'totalMessages'      => $totalMessages,
+        ]]);
+    } catch (\Throwable $e) {
+        logEvent('error', 'stats', 'Failed to aggregate stats', ['detail' => $e->getMessage()]);
+        respond(200, ['stats' => null]);
+    }
 }
 
 function encryptKey(string $key): string {
@@ -547,7 +590,31 @@ function handleChat(array $body): void {
     $provider  = $body['provider']  ?? 'anthropic';
     $model     = $body['model']     ?? 'claude-3-7-sonnet-20250219';
     $system    = $body['system']    ?? 'You are a helpful AI assistant.';
-    $maxTokens = min((int) ($body['maxTokens'] ?? 2048), 8192);
+    $maxTokens = min(max((int) ($body['maxTokens'] ?? 2048), 1), 16384);
+
+    // Temperature (clamped to a safe 0–1 range that every provider accepts).
+    $temperature = null;
+    if (isset($body['temperature']) && is_numeric($body['temperature'])) {
+        $temperature = max(0.0, min(1.0, (float) $body['temperature']));
+    }
+
+    // Fold the configured tone/verbosity into the system prompt so they actually
+    // affect the model's output (previously these settings were inert).
+    $toneMap = [
+        'professional' => 'Maintain a formal, professional tone.',
+        'casual'       => 'Use a friendly, conversational tone.',
+        'technical'    => 'Be precise and technical, using correct domain terminology.',
+        'creative'     => 'Be imaginative and expressive in your phrasing.',
+    ];
+    $verbosityMap = [
+        'concise'  => 'Keep responses brief and to the point.',
+        'balanced' => 'Use a balanced, standard response length.',
+        'detailed' => 'Provide thorough, comprehensive responses.',
+    ];
+    $styleNotes = [];
+    if (isset($toneMap[$body['tone'] ?? ''])) $styleNotes[] = $toneMap[$body['tone']];
+    if (isset($verbosityMap[$body['verbosity'] ?? ''])) $styleNotes[] = $verbosityMap[$body['verbosity']];
+    if ($styleNotes) $system .= "\n\n" . implode(' ', $styleNotes);
 
     // Conversation context for persistence (only present when called from ChatInterface)
     $hasConvContext = array_key_exists('conversationId', $body);
@@ -557,29 +624,16 @@ function handleChat(array $body): void {
 
     if (empty($messages)) respond(400, ['error' => 'No messages provided.']);
 
-    // ── Persist user message to MySQL BEFORE calling the model ────────────────
-    $db = null;
-    $dbError = null;
-    $lastUserMessageId = null;
-    if ($hasConvContext && $currentAuth) {
-        try {
-            $db = getDB();
-            if ($db) {
-                if (empty($convId)) {
-                    $convId = bin2hex(random_bytes(16));
-                    $stmt = $db->prepare("INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)");
-                    $stmt->execute([$convId, $currentAuth['id'], $convTitle]);
-                }
-                $lastMsg = end($messages);
-                if ($lastMsg) {
-                    $lastUserMessageId = bin2hex(random_bytes(16));
-                    $stmt = $db->prepare("INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)");
-                    $stmt->execute([$lastUserMessageId, $convId, 'user', $lastMsg['content']]);
-                }
-            }
-        } catch (\Throwable $e) {
-            $dbError = $e->getMessage();
-        }
+    // Open the DB connection up-front (used for provider keys and, later, for
+    // persistence). The user message is persisted AFTER a successful model
+    // response so a failed call never leaves an orphaned message behind.
+    $db = ($hasConvContext && $currentAuth) ? getDB() : null;
+
+    // Honour the "Log Conversations" admin setting.
+    $logConversations = true;
+    if ($db) {
+        $row = $db->query("SELECT `value` FROM app_config WHERE `key` = 'logConversations'")->fetch();
+        if ($row !== false) $logConversations = json_decode($row['value'], true) !== false;
     }
 
     $assistantContent = '';
@@ -621,12 +675,14 @@ function handleChat(array $body): void {
     }
 
     if ($provider === 'anthropic') {
-        $payload = json_encode([
+        $payloadArr = [
             'model'      => $model,
             'max_tokens' => $maxTokens,
             'system'     => $system,
             'messages'   => $messages,
-        ], JSON_UNESCAPED_UNICODE);
+        ];
+        if ($temperature !== null) $payloadArr['temperature'] = $temperature;
+        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
         $ch = curl_init('https://api.anthropic.com/v1/messages');
         curl_setopt_array($ch, [
@@ -685,11 +741,13 @@ function handleChat(array $body): void {
             $openAiMessages[] = ['role' => $m['role'], 'content' => $m['content']];
         }
 
-        $payload = json_encode([
+        $payloadArr = [
             'model'      => $model,
             'messages'   => $openAiMessages,
             'max_tokens' => $maxTokens,
-        ], JSON_UNESCAPED_UNICODE);
+        ];
+        if ($temperature !== null) $payloadArr['temperature'] = $temperature;
+        $payload = json_encode($payloadArr, JSON_UNESCAPED_UNICODE);
 
         $headers = [
             'Authorization: Bearer ' . $apiKey,
@@ -751,6 +809,7 @@ function handleChat(array $body): void {
                 'maxOutputTokens' => $maxTokens,
             ]
         ];
+        if ($temperature !== null) $payloadData['generationConfig']['temperature'] = $temperature;
         if ($system) {
             $payloadData['systemInstruction'] = [
                 'parts' => [['text' => $system]]
@@ -814,7 +873,9 @@ function handleChat(array $body): void {
         'meta-llama/llama-3.1-70b-instruct' => ['input' => 0.52, 'output' => 0.52],
         'mistralai/mistral-large-2407' => ['input' => 2.00, 'output' => 6.00],
     ];
-    $mCost = $modelCosts[$model] ?? $modelCosts['claude-3-7-sonnet-20250219'];
+    // Unknown models (e.g. free OpenRouter models) are treated as zero-cost rather
+    // than billed at Claude Sonnet rates.
+    $mCost = $modelCosts[$model] ?? ['input' => 0.0, 'output' => 0.0];
     $approxCost = ($inputTokens / 1000000 * $mCost['input']) + ($outputTokens / 1000000 * $mCost['output']);
 
     if ($currentUser) {
@@ -830,15 +891,16 @@ function handleChat(array $body): void {
         ")->execute([$totalTokens, $approxCost, $today, $currentUser['id']]);
     }
 
-    // ── Persist conversation and messages to MySQL ──────────────────────────
-    if ($hasConvContext) {
+    // ── Persist conversation and messages to MySQL (only after a successful
+    //    response, and only when conversation logging is enabled) ────────────
+    if ($hasConvContext && $logConversations) {
         $db = getDB();
         if ($db && !empty($currentAuth['id'])) {
             try {
                 $now    = date('Y-m-d H:i:s');
                 $userId = $currentAuth['id'];
 
-                if ($convId === '') $convId = bin2hex(random_bytes(9));
+                if ($convId === '') $convId = bin2hex(random_bytes(16));
 
                 // Upsert conversation record
                 $db->prepare(
@@ -847,14 +909,22 @@ function handleChat(array $body): void {
                      ON DUPLICATE KEY UPDATE title = VALUES(title), updated_at = VALUES(updated_at)"
                 )->execute([$convId, $userId, $convTitle ?: 'New conversation', $tool, $now, $now]);
 
-                // Save assistant response
+                // Save the user's latest message and the assistant response together.
+                $lastMsg = end($messages);
+                if ($lastMsg) {
+                    $db->prepare(
+                        "INSERT INTO messages (id, conversation_id, role, content, created_at)
+                         VALUES (?, ?, 'user', ?, ?)"
+                    )->execute([bin2hex(random_bytes(16)), $convId, $lastMsg['content'], $now]);
+                }
+
                 $db->prepare(
                     "INSERT INTO messages (id, conversation_id, role, content, tokens, created_at)
                      VALUES (?, ?, 'assistant', ?, ?, ?)"
-                )->execute([bin2hex(random_bytes(9)), $convId, $assistantContent, $outputTokens, $now]);
+                )->execute([bin2hex(random_bytes(16)), $convId, $assistantContent, $outputTokens, $now]);
 
             } catch (\Throwable $e) {
-                error_log('[Nafas AI] DB error saving chat: ' . $e->getMessage());
+                logEvent('error', 'chat', 'DB error saving conversation', ['detail' => $e->getMessage()]);
             }
         }
     }
@@ -863,14 +933,9 @@ function handleChat(array $body): void {
     if (mt_rand(1, 100) <= 5) {
         if ($db) {
             try {
-                // Determine retention days from config, default 90
-                $stmt = $db->query("SELECT `value` FROM app_config WHERE `key` = 'aiConfig'");
-                $row = $stmt->fetch();
-                $rd = 90;
-                if ($row) {
-                    $ac = json_decode($row['value'], true);
-                    if (isset($ac['retentionDays'])) $rd = (int)$ac['retentionDays'];
-                }
+                // Retention days are stored as their own config row.
+                $row = $db->query("SELECT `value` FROM app_config WHERE `key` = 'retentionDays'")->fetch();
+                $rd  = $row ? (int) json_decode($row['value'], true) : 90;
                 if ($rd > 0) {
                     $db->prepare("DELETE FROM conversations WHERE updated_at < (NOW() - INTERVAL ? DAY)")
                        ->execute([$rd]);
@@ -1090,10 +1155,10 @@ function handleConfigSave(array $body): void {
 
     // Allowed keys to prevent arbitrary writes
     $allowedKeys = [
-        'providers', 'systemPrompt', 'model', 'temperature', 'maxTokens', 
-        'tone', 'verbosity', 'streamResponses', 'logConversations', 
+        'providers', 'systemPrompt', 'model', 'temperature', 'maxTokens',
+        'tone', 'verbosity', 'streamResponses', 'logConversations',
         'retentionDays', 'allowDataExport', 'apiKey', 'platformName', 'companyName',
-        'defaultProviderId'
+        'defaultProviderId', 'toolAccess', 'roles'
     ];
 
     // Handle provider apiKeys encryption and masking

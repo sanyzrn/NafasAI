@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Settings, Save, Globe, Lock, Bell, Database, Cpu, Key, MessageSquare, Sliders, RotateCcw
+  Settings, Save, Globe, Database, Cpu, MessageSquare, Sliders, RotateCcw
 } from 'lucide-react';
 import { useAppStore, AITone, AIVerbosity } from '../../store/appStore';
 import { apiFetch } from '../../utils/api';
@@ -63,7 +63,6 @@ export default function SystemSettings() {
   const { aiConfig, updateAIConfig } = useAppStore();
   const [activeSection, setActiveSection] = useState('ai');
   const [saved, setSaved] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
 
   const [localPlatformName, setLocalPlatformName] = useState(aiConfig.platformName);
   const [localCompanyName, setLocalCompanyName] = useState(aiConfig.companyName);
@@ -192,10 +191,6 @@ export default function SystemSettings() {
                       <option value={8192}>8,192</option>
                       <option value={16384}>16,384</option>
                     </select>
-                  </SettingRow>
-
-                  <SettingRow label="Stream Responses" description="Show responses as they generate">
-                    <Toggle value={aiConfig.streamResponses} onChange={(v) => updateAIConfig({ streamResponses: v })} />
                   </SettingRow>
                 </div>
 

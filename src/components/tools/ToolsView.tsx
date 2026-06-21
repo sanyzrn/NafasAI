@@ -1,4 +1,4 @@
-import { MessageSquare, Image, FileSearch, Globe, Code2, FileText, Lock, ArrowRight } from 'lucide-react';
+import { MessageSquare, Globe, Code2, FileText, Lock, ArrowRight } from 'lucide-react';
 import { useAuthStore, Permission } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { cn } from '../../utils/cn';
@@ -80,13 +80,11 @@ function ToolCard({ tool, hasAccess, onClick }: { tool: Tool; hasAccess: boolean
 
 export default function ToolsView() {
   const { currentUser } = useAuthStore();
-  const { setActiveView, createConversation, setActiveConversation } = useAppStore();
+  const { setActiveView, createConversation, setActiveConversation, toolAccess } = useAppStore();
 
   const handleToolClick = (toolId: Permission) => {
     if (toolId === 'research') {
       setActiveView('search');
-    } else if (toolId === 'image_generation') {
-      setActiveView('image');
     } else {
       const id = createConversation(toolId);
       setActiveConversation(id);
@@ -94,8 +92,17 @@ export default function ToolsView() {
     }
   };
 
-  const accessibleTools = ALL_TOOLS.filter((t) => currentUser?.permissions.includes(t.id));
-  const lockedTools = ALL_TOOLS.filter((t) => !currentUser?.permissions.includes(t.id));
+  // A tool is available when the user has the permission AND the admin's Tool Access
+  // config has it enabled for the user's role.
+  const isToolAvailable = (toolId: Permission) => {
+    if (!currentUser?.permissions.includes(toolId)) return false;
+    const cfg = toolAccess[toolId];
+    if (!cfg) return true; // not configured → allowed by default
+    return cfg.enabled && cfg.roles.includes(currentUser.role);
+  };
+
+  const accessibleTools = ALL_TOOLS.filter((t) => isToolAvailable(t.id));
+  const lockedTools = ALL_TOOLS.filter((t) => !isToolAvailable(t.id));
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#0d0d0d]">

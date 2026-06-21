@@ -1,18 +1,10 @@
 import { Activity, AlertTriangle, TrendingUp, Edit2, Save, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../../store/appStore';
+import { apiFetch } from '../../utils/api';
 import { User } from '../../store/authStore';
 import { cn } from '../../utils/cn';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-
-const monthlyData = [
-  { month: 'Jan', requests: 1840 },
-  { month: 'Feb', requests: 2210 },
-  { month: 'Mar', requests: 1980 },
-  { month: 'Apr', requests: 2650 },
-  { month: 'May', requests: 2980 },
-  { month: 'Jun', requests: 1860 },
-];
 
 const darkTooltipStyle = {
   backgroundColor: '#161616',
@@ -81,6 +73,17 @@ function StatCard({ label, value, sub, icon: Icon, accent }: {
 export default function UsageLimits() {
   const { users, updateUser } = useAppStore();
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [monthly, setMonthly] = useState<{ month: string; requests: number }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch({ action: 'stats.get' });
+        const data = await res.json();
+        if (data.stats?.monthly) setMonthly(data.stats.monthly);
+      } catch { /* apiFetch surfaces a toast on failure */ }
+    })();
+  }, []);
 
   const totalRequests = users.reduce((a, u) => a + u.usageCount, 0);
   const overLimitUsers = users.filter((u) => u.usageLimit > 0 && u.usageCount / u.usageLimit > 0.9);
@@ -89,20 +92,16 @@ export default function UsageLimits() {
   const handleSaveLimit = async (id: string, limit: number) => {
     const user = users.find((u) => u.id === id);
     if (!user) return;
-    const updated = { ...user, usageLimit: limit };
+    // Keep usageLimit and dailyRequestLimit in sync so the edited value is the one
+    // the backend actually enforces.
+    const updated = { ...user, usageLimit: limit, dailyRequestLimit: limit };
     updateUser(updated); // Optimistic UI update
-    
-    // Server-side persistence
+
     try {
-      const { apiFetch } = await import('../../utils/api');
-      await apiFetch({
-        action: 'users.save',
-        user: updated
-      });
+      await apiFetch({ action: 'users.save', user: updated });
     } catch (e) {
       console.error('Failed to save usage limit', e);
-      // Revert if needed
-      updateUser(user);
+      updateUser(user); // Revert
     }
   };
 
@@ -123,7 +122,7 @@ export default function UsageLimits() {
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
-          <StatCard label="Total this month" value={totalRequests.toLocaleString()} icon={TrendingUp} />
+          <StatCard label="Total requests" value={totalRequests.toLocaleString()} icon={TrendingUp} />
           <StatCard label="Near limit (>90%)" value={String(overLimitUsers.length)} icon={AlertTriangle} accent={overLimitUsers.length > 0} />
           <StatCard label="Avg per user" value={String(avgPerUser)} sub="requests" icon={Activity} />
         </div>
@@ -145,16 +144,22 @@ export default function UsageLimits() {
 
         {/* Chart */}
         <div className="bg-white dark:bg-[#111111] rounded-xl border border-gray-100 dark:border-[#1f1f1f] p-5">
-          <h3 className="text-xs font-semibold text-gray-400 dark:text-[#6b7280] uppercase tracking-wider mb-4">Monthly Volume (Placeholder)</h3>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={monthlyData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={darkTooltipStyle} />
-              <Bar dataKey="requests" fill="#b61615" radius={[4, 4, 0, 0]} barSize={28} opacity={0.85} />
-            </BarChart>
-          </ResponsiveContainer>
+          <h3 className="text-xs font-semibold text-gray-400 dark:text-[#6b7280] uppercase tracking-wider mb-4">Monthly Requests (last 6 months)</h3>
+          {monthly.length > 0 ? (
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={monthly} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#4b5563' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={darkTooltipStyle} />
+                <Bar dataKey="requests" fill="#b61615" radius={[4, 4, 0, 0]} barSize={28} opacity={0.85} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[160px] flex items-center justify-center">
+              <p className="text-xs text-gray-400 dark:text-[#374151]">No request history yet.</p>
+            </div>
+          )}
         </div>
 
         {/* Per-user table */}

@@ -5,6 +5,7 @@ import BottomNav from './BottomNav';
 import ChatInterface from './chat/ChatInterface';
 import ToolsView from './tools/ToolsView';
 import DeepSearchView from './tools/DeepSearchView';
+// Image Generation is hidden in this release (no provider implemented yet).
 import UsageView from './user/UsageView';
 import AdminOverview from './admin/AdminOverview';
 import UserManagement from './admin/UserManagement';

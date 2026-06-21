@@ -1,54 +1,41 @@
 import { useState } from 'react';
-import { Sliders, MessageSquare, Image, FileSearch, Globe, Code2, FileText, Save } from 'lucide-react';
+import { Sliders, MessageSquare, Globe, Code2, FileText, Save } from 'lucide-react';
 import { Permission, UserRole } from '../../store/authStore';
+import { useAppStore } from '../../store/appStore';
+import { apiFetch } from '../../utils/api';
 import { cn } from '../../utils/cn';
 
-interface ToolConfig {
+interface ToolMeta {
   id: Permission;
   name: string;
   description: string;
   icon: React.ElementType;
-  model: string;
-  defaultRoles: UserRole[];
-  rateLimit: number;
 }
 
-const TOOLS: ToolConfig[] = [
+const TOOLS: ToolMeta[] = [
   {
     id: 'chat',
     name: 'AI Chat',
     description: 'General-purpose conversational AI for Q&A, writing, and analysis.',
     icon: MessageSquare,
-    model: 'claude-sonnet-4-6',
-    defaultRoles: ['admin', 'manager', 'employee'],
-    rateLimit: 100,
   },
   {
     id: 'research',
     name: 'Research Assistant',
-    description: 'In-depth research with web access, citations and synthesis.',
+    description: 'In-depth research with citations and synthesis.',
     icon: Globe,
-    model: 'claude-opus-4-8',
-    defaultRoles: ['admin', 'manager'],
-    rateLimit: 30,
   },
   {
     id: 'code_assistant',
     name: 'Code Assistant',
     description: 'Write, debug, explain and optimize code in all languages.',
     icon: Code2,
-    model: 'claude-sonnet-4-6',
-    defaultRoles: ['admin', 'employee'],
-    rateLimit: 80,
   },
   {
     id: 'summarization',
     name: 'Summarization',
     description: 'Condense long documents, emails, and reports into clear summaries.',
     icon: FileText,
-    model: 'claude-haiku-4-5',
-    defaultRoles: ['admin', 'manager', 'employee'],
-    rateLimit: 150,
   },
 ];
 
@@ -73,11 +60,15 @@ function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
   );
 }
 
+const DEFAULT_CFG = { enabled: true, roles: ['admin', 'manager', 'employee'] as UserRole[], rateLimit: 100 };
+
 export default function ToolAccess() {
+  const { toolAccess, updateToolAccess } = useAppStore();
   const [configs, setConfigs] = useState<Record<string, { roles: UserRole[]; enabled: boolean; rateLimit: number }>>(
-    Object.fromEntries(TOOLS.map((t) => [t.id, { roles: t.defaultRoles, enabled: true, rateLimit: t.rateLimit }]))
+    Object.fromEntries(TOOLS.map((t) => [t.id, { ...DEFAULT_CFG, ...(toolAccess[t.id] ?? {}) }]))
   );
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const toggleRole = (toolId: string, role: UserRole) => {
     setConfigs((prev) => {
@@ -92,9 +83,18 @@ export default function ToolAccess() {
     });
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    updateToolAccess(configs);
+    try {
+      await apiFetch({ action: 'config.save', config: { toolAccess: configs } });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      /* apiFetch surfaces a toast on failure */
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -112,13 +112,14 @@ export default function ToolAccess() {
           </div>
           <button
             onClick={handleSave}
+            disabled={saving}
             className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition',
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-60',
               saved ? 'bg-emerald-600 text-white' : 'bg-[#b61615] hover:bg-[#9c1110] text-white'
             )}
           >
             <Save className="w-4 h-4" />
-            {saved ? 'Saved!' : 'Save'}
+            {saved ? 'Saved!' : saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -144,9 +145,6 @@ export default function ToolAccess() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-semibold text-sm text-gray-900 dark:text-white">{tool.name}</h3>
-                    <span className="text-xs text-gray-400 dark:text-[#4b5563] bg-gray-100 dark:bg-[#1a1a1a] px-2 py-0.5 rounded-md">
-                      {tool.model}
-                    </span>
                   </div>
                   <p className="text-xs text-gray-400 dark:text-[#4b5563] mb-3 leading-relaxed">{tool.description}</p>
 

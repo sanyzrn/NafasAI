@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User } from './authStore';
+import { User, UserRole, Permission } from './authStore';
 import { useAuthStore } from './authStore';
 import { apiFetch } from '../utils/api';
 import toast from 'react-hot-toast';
@@ -80,6 +80,12 @@ export interface UploadedFile {
   status: 'processing' | 'ready' | 'error';
 }
 
+export interface ToolAccessConfig {
+  enabled: boolean;
+  roles: UserRole[];
+  rateLimit: number;
+}
+
 export type AITone = 'professional' | 'casual' | 'technical' | 'creative';
 export type AIVerbosity = 'concise' | 'balanced' | 'detailed';
 
@@ -115,6 +121,8 @@ interface AppState {
   providers: ApiProvider[];
   selectedProviderId: ProviderId;
   selectedModelId: string;
+  toolAccess: Record<string, ToolAccessConfig>;
+  roles: Record<string, Permission[]>;
 
   setServerError: (err: string | null) => void;
   setIsPasswordModalOpen: (val: boolean) => void;
@@ -126,6 +134,7 @@ interface AppState {
   createConversation: (tool: string) => string;
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>) => void;
+  truncateToLastUser: (conversationId: string) => void;
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
   addFile: (file: Omit<UploadedFile, 'id' | 'uploadedAt' | 'status'>) => void;
@@ -141,6 +150,8 @@ interface AppState {
   loadMessages: (conversationId: string) => Promise<void>;
   loadConfig: () => Promise<void>;
   updateAIConfig: (config: Partial<AIConfig>) => void;
+  updateToolAccess: (toolAccess: Record<string, ToolAccessConfig>) => void;
+  updateRoles: (roles: Record<string, Permission[]>) => void;
   resetUserState: () => void;
 }
 
@@ -229,6 +240,19 @@ const DEFAULT_PROVIDERS: ApiProvider[] = [
   }
 ];
 
+const DEFAULT_TOOL_ACCESS: Record<string, ToolAccessConfig> = {
+  chat:           { enabled: true, roles: ['admin', 'manager', 'employee'], rateLimit: 100 },
+  research:       { enabled: true, roles: ['admin', 'manager'],             rateLimit: 30 },
+  code_assistant: { enabled: true, roles: ['admin', 'employee'],            rateLimit: 80 },
+  summarization:  { enabled: true, roles: ['admin', 'manager', 'employee'], rateLimit: 150 },
+};
+
+const DEFAULT_ROLES: Record<string, Permission[]> = {
+  admin:    ['chat', 'research', 'code_assistant', 'summarization', 'admin_panel', 'user_management', 'system_settings'],
+  manager:  ['chat', 'research', 'summarization'],
+  employee: ['chat', 'summarization'],
+};
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -246,6 +270,8 @@ export const useAppStore = create<AppState>()(
       providers: DEFAULT_PROVIDERS,
       selectedProviderId: 'anthropic',
       selectedModelId: 'claude-3-7-sonnet-20250219',
+      toolAccess: DEFAULT_TOOL_ACCESS,
+      roles: DEFAULT_ROLES,
 
       setServerError: (err) => set({ serverError: err }),
       setIsPasswordModalOpen: (val) => set({ isPasswordModalOpen: val }),
@@ -301,6 +327,17 @@ export const useAppStore = create<AppState>()(
               updated.title = message.content.slice(0, 45) + (message.content.length > 45 ? '…' : '');
             }
             return updated;
+          }),
+        }));
+      },
+
+      truncateToLastUser: (conversationId) => {
+        set((state) => ({
+          conversations: state.conversations.map((c) => {
+            if (c.id !== conversationId) return c;
+            const msgs = [...c.messages];
+            while (msgs.length && msgs[msgs.length - 1].role === 'assistant') msgs.pop();
+            return { ...c, messages: msgs };
           }),
         }));
       },
@@ -489,6 +526,8 @@ export const useAppStore = create<AppState>()(
                 providers: newProviders,
                 selectedProviderId: nextProviderId,
                 selectedModelId: nextModelId,
+                toolAccess: data.config.toolAccess ?? state.toolAccess,
+                roles: data.config.roles ?? state.roles,
               };
             });
           }
@@ -500,6 +539,9 @@ export const useAppStore = create<AppState>()(
       updateAIConfig: (config) => {
         set((state) => ({ aiConfig: { ...state.aiConfig, ...config } }));
       },
+
+      updateToolAccess: (toolAccess) => set({ toolAccess }),
+      updateRoles: (roles) => set({ roles }),
 
       resetUserState: () => {
         set({ conversations: [], activeConversationId: null, users: [] });
@@ -514,6 +556,8 @@ export const useAppStore = create<AppState>()(
         providers: state.providers,
         selectedProviderId: state.selectedProviderId,
         selectedModelId: state.selectedModelId,
+        toolAccess: state.toolAccess,
+        roles: state.roles,
       }),
     }
   )

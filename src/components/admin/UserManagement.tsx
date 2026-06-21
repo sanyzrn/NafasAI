@@ -7,7 +7,6 @@ import { cn } from '../../utils/cn';
 
 const ALL_PERMISSIONS: { id: Permission; label: string; category: string }[] = [
   { id: 'chat',               label: 'AI Chat',         category: 'Tools' },
-  { id: 'image_generation',   label: 'Image Generation',category: 'Tools' },
   { id: 'research',           label: 'Research',        category: 'Tools' },
   { id: 'code_assistant',     label: 'Code Assistant',  category: 'Tools' },
   { id: 'summarization',      label: 'Summarization',   category: 'Tools' },
@@ -51,6 +50,7 @@ function UserModal({ user, onClose, onSave }: {
   onSave: (u: User, password?: string) => void;
 }) {
   const isNew = !user?.id;
+  const roleDefaults = useAppStore((s) => s.roles);
   const [form, setForm] = useState<ModalForm>(user ?? {
     name: '', email: '', role: 'employee', department: '', permissions: ['chat'],
     isActive: true,
@@ -177,7 +177,16 @@ function UserModal({ user, onClose, onSave }: {
             <div>
               <label className="block text-xs font-medium text-gray-500 dark:text-[#6b7280] mb-1.5 uppercase tracking-wider">Role</label>
               <div className="relative">
-                <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as UserRole }))} className={cn(inputCls, 'appearance-none')}>
+                <select value={form.role} onChange={(e) => {
+                  const role = e.target.value as UserRole;
+                  setForm((f) => {
+                    // For new users, prefill permissions from the role's defaults.
+                    if (isNew && roleDefaults[role]) {
+                      return { ...f, role, permissions: [...roleDefaults[role]] };
+                    }
+                    return { ...f, role };
+                  });
+                }} className={cn(inputCls, 'appearance-none')}>
                   <option value="employee">Employee</option>
                   <option value="manager">Manager</option>
                   <option value="admin">Admin</option>
