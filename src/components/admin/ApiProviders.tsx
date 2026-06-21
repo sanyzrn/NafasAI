@@ -38,14 +38,16 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
   const meta = PROVIDER_META[provider.id];
 
   const handleTest = async () => {
     if (!provider.apiKey.trim()) return;
     setTesting(true);
     setTestResult(null);
+    setTestError(null);
     try {
-      const res = await apiFetch({
+      await apiFetch({
         action: 'providers.test',
         provider: provider.id,
         apiKey: provider.apiKey,
@@ -54,6 +56,7 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
       setTestResult('ok');
     } catch (e) {
       setTestResult('fail');
+      setTestError(e instanceof Error ? e.message : null);
     } finally {
       setTesting(false);
     }
@@ -176,7 +179,7 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
               <p className={cn('text-xs mt-1.5 flex items-center gap-1', testResult === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[#b61615]')}>
                 {testResult === 'ok'
                   ? <><CheckCircle2 className="w-3.5 h-3.5" /> Connection successful — API key is valid.</>
-                  : <><XCircle className="w-3.5 h-3.5" /> Connection failed — check your API key and try again.</>
+                  : <><XCircle className="w-3.5 h-3.5" /> {testError ?? 'Connection failed — check your API key and try again.'}</>
                 }
               </p>
             )}
