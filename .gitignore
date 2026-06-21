@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+
+# Server config — contains API keys and DB credentials, NEVER commit
+public/config.php
+config.php
