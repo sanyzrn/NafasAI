@@ -13,6 +13,7 @@ import ToolAccess from './admin/ToolAccess';
 import SystemSettings from './admin/SystemSettings';
 import UsageLimits from './admin/UsageLimits';
 import ApiProviders from './admin/ApiProviders';
+import SystemLogs from './admin/SystemLogs';
 import { useAppStore, NavView } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../utils/cn';
@@ -26,6 +27,7 @@ const ADMIN_TABS: { id: NavView; label: string }[] = [
   { id: 'admin-tools', label: 'Tools' },
   { id: 'admin-usage', label: 'Usage' },
   { id: 'admin-providers', label: 'Providers' },
+  { id: 'admin-logs', label: 'Logs' },
   { id: 'admin-settings', label: 'Settings' },
 ];
 
@@ -127,6 +129,7 @@ function ViewContent({ view }: { view: NavView }) {
     case 'admin-tools':      return <ToolAccess />;
     case 'admin-usage':      return <UsageLimits />;
     case 'admin-providers':  return <ApiProviders />;
+    case 'admin-logs':       return <SystemLogs />;
     case 'admin-settings':   return <SystemSettings />;
     default:                 return <ChatInterface />;
   }
