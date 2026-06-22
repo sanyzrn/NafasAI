@@ -178,6 +178,26 @@ export default function SystemSettings() {
                   </p>
                 </div>
 
+                {/* Error / fallback message */}
+                <div className="bg-white dark:bg-[#111111] rounded-xl border border-gray-100 dark:border-[#1f1f1f] p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <MessageSquare className="w-4 h-4 text-[#b61615]" />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Error / Apology Message</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-[#4b5563] mb-3 leading-relaxed">
+                    Shown to users whenever a response fails for any reason. The real technical
+                    cause is never shown to them — it is recorded in <span className="font-medium text-gray-600 dark:text-[#9ca3af]">Admin → System Logs</span>.
+                  </p>
+                  <textarea
+                    value={aiConfig.errorMessage ?? ''}
+                    onChange={(e) => updateAIConfig({ errorMessage: e.target.value })}
+                    rows={3}
+                    placeholder="Sorry, something went wrong. Please try again…"
+                    className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-[#2a2a2a] bg-gray-50 dark:bg-[#0d0d0d] text-sm text-gray-900 dark:text-[#e5e7eb] placeholder-gray-400 dark:placeholder-[#374151] focus:outline-none focus:ring-2 focus:ring-[#b61615]/30 focus:border-[#b61615] transition leading-relaxed"
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+
                 {/* Generation Settings */}
                 <div className="bg-white dark:bg-[#111111] rounded-xl border border-gray-100 dark:border-[#1f1f1f] px-5 py-2">
                   <SettingRow label="Max Output Tokens" description="Maximum response length">
