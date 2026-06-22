@@ -223,7 +223,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="mt-auto pt-8 pb-2 w-full flex flex-col sm:flex-row items-center justify-end text-[11px] text-gray-400 dark:text-[#4b5563] opacity-60 hover:opacity-100 transition-opacity gap-2">
           <div>
-            Version 0.4.7 Beta
+            Version 0.5.0 Beta
           </div>
         </div>
       </div>

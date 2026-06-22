@@ -1,4 +1,4 @@
-import { MessageSquare, Wrench, FolderOpen, Shield, Zap } from 'lucide-react';
+import { MessageSquare, Wrench, Shield, Zap } from 'lucide-react';
 import { useAppStore, NavView } from '../store/appStore';
 import { useAuthStore } from '../store/authStore';
 import { cn } from '../utils/cn';

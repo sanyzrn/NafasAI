@@ -26,7 +26,7 @@ export default function ChangePasswordModal({ onClose, forced = false }: { onClo
 
     setIsLoading(true);
     try {
-      const res = await apiFetch({
+      await apiFetch({
         action: 'users.changePassword',
         oldPassword: currentPass,
         newPassword: newPass
