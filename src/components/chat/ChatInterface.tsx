@@ -206,9 +206,10 @@ export default function ChatInterface() {
       setIsTyping(false);
 
       if (!res.ok) {
-        // The real cause is recorded server-side (Admin → System Logs). The end
-        // user only sees the admin-configurable apology message.
-        addMessage(convId, { role: 'assistant', content: fallbackMessage });
+        // Intentional limits (usage/time) are shown as-is; technical failures are
+        // hidden behind the apology message (real cause goes to Admin → System Logs).
+        const content = data.userFacing && data.error ? data.error : fallbackMessage;
+        addMessage(convId, { role: 'assistant', content });
       } else {
         addMessage(convId, {
           role: 'assistant',

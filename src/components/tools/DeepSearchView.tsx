@@ -81,8 +81,9 @@ export default function DeepSearchView() {
       const data = await res.json();
       const fallbackMessage = aiConfig.errorMessage?.trim() || 'Sorry, something went wrong. Please try again in a moment.';
       if (!res.ok || data.error) {
-        // Real cause is logged server-side; the user sees the friendly message.
-        setError(fallbackMessage);
+        // Intentional limits are shown as-is; technical failures show the apology
+        // message (real cause is logged server-side).
+        setError(data.userFacing && data.error ? data.error : fallbackMessage);
       } else {
         const result = data.content ?? '';
         setSynthesis(result);

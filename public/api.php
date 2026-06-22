@@ -555,22 +555,24 @@ function handleChat(array $body): void {
             $db->prepare("UPDATE users SET tokensUsed=0, requestsUsed=0, costUsed=0, lastUsageDate=? WHERE id=?")->execute([$today, $currentUser['id']]);
         }
 
+        // These are intentional, user-facing limits — `userFacing` tells the client
+        // to show the message as-is instead of the generic apology message.
         $tr = $currentUser['timeRestriction'] ?? null;
         if ($tr && !empty($tr['enabled'])) {
             $h = (int) date('G'); $d = (int) date('w');
             if (!in_array($d, $tr['days'] ?? []) || $h < ($tr['startHour'] ?? 0) || $h >= ($tr['endHour'] ?? 24)) {
-                respond(403, ['error' => 'Access not allowed at this time.']);
+                respond(403, ['error' => 'Access not allowed at this time.', 'userFacing' => true]);
             }
         }
 
         if (($currentUser['dailyRequestLimit'] ?? -1) > 0 && $currentUser['requestsUsed'] >= $currentUser['dailyRequestLimit']) {
-            respond(429, ['error' => 'Daily request limit reached.']);
+            respond(429, ['error' => 'Daily request limit reached.', 'userFacing' => true]);
         }
         if (($currentUser['dailyTokenLimit'] ?? -1) > 0 && $currentUser['tokensUsed'] >= $currentUser['dailyTokenLimit']) {
-            respond(429, ['error' => 'Daily token limit reached.']);
+            respond(429, ['error' => 'Daily token limit reached.', 'userFacing' => true]);
         }
         if (($currentUser['dailyCostLimit'] ?? -1) > 0 && $currentUser['costUsed'] >= $currentUser['dailyCostLimit']) {
-            respond(429, ['error' => 'Daily cost limit reached.']);
+            respond(429, ['error' => 'Daily cost limit reached.', 'userFacing' => true]);
         }
     }
 
