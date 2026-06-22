@@ -30,7 +30,7 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <>
-        <Toaster position="top-right" />
+        <Toaster position="top-right" containerStyle={{ zIndex: 100000 }} toastOptions={{ style: { zIndex: 100000 } }} />
         <LoginPage />
       </>
     );
@@ -38,7 +38,7 @@ export default function App() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster position="top-right" containerStyle={{ zIndex: 100000 }} toastOptions={{ style: { zIndex: 100000 } }} />
       <Layout />
     </>
   );
