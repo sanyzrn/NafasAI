@@ -714,6 +714,10 @@ function handleChat(array $body): void {
         $data = json_decode($result, true);
         if ($status !== 200) {
             $msg = $data['error']['message'] ?? "API error (HTTP {$status}).";
+            if ($status === 429) {
+                $msg = 'Provider rate limit reached (429): ' . $msg
+                     . '. Free models are heavily rate-limited — wait a moment, choose another model, or add credit on the provider.';
+            }
             logEvent('error', 'chat', 'Provider returned an error response', [
                 'provider' => $provider, 'model' => $model, 'http_status' => $status, 'message' => $msg,
             ]);
@@ -783,6 +787,10 @@ function handleChat(array $body): void {
         $data = json_decode($result, true);
         if ($status !== 200) {
             $msg = $data['error']['message'] ?? "API error (HTTP {$status}).";
+            if ($status === 429) {
+                $msg = 'Provider rate limit reached (429): ' . $msg
+                     . '. Free models are heavily rate-limited — wait a moment, choose another model, or add credit on the provider.';
+            }
             logEvent('error', 'chat', 'Provider returned an error response', [
                 'provider' => $provider, 'model' => $model, 'http_status' => $status, 'message' => $msg,
             ]);
@@ -844,6 +852,10 @@ function handleChat(array $body): void {
         $data = json_decode($result, true);
         if ($status !== 200) {
             $msg = $data['error']['message'] ?? "API error (HTTP {$status}).";
+            if ($status === 429) {
+                $msg = 'Provider rate limit reached (429): ' . $msg
+                     . '. Free models are heavily rate-limited — wait a moment, choose another model, or add credit on the provider.';
+            }
             logEvent('error', 'chat', 'Provider returned an error response', [
                 'provider' => $provider, 'model' => $model, 'http_status' => $status, 'message' => $msg,
             ]);
