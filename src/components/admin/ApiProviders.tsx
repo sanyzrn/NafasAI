@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Key, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink, Save, Zap, Globe } from 'lucide-react';
+import { Key, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink, Save, Zap, Globe, Plus, Trash2 } from 'lucide-react';
 import { useAppStore, ApiProvider, ProviderId } from '../../store/appStore';
 import { cn } from '../../utils/cn';
 import { apiFetch } from '../../utils/api';
@@ -39,7 +39,35 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'ok' | 'fail' | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  const [newModelId, setNewModelId] = useState('');
+  const [newModelName, setNewModelName] = useState('');
   const meta = PROVIDER_META[provider.id];
+
+  const addModel = () => {
+    const id = newModelId.trim();
+    if (!id) return;
+    if (provider.models.some((m) => m.id === id)) {
+      setNewModelId('');
+      setNewModelName('');
+      return;
+    }
+    const model = {
+      id,
+      name: newModelName.trim() || id,
+      contextWindow: 0,
+      costPer1kInput: 0,
+      costPer1kOutput: 0,
+    };
+    updateProvider(provider.id, { models: [...provider.models, model] });
+    // Make the freshly added model the default if none is set yet.
+    if (!provider.defaultModel) updateProvider(provider.id, { defaultModel: id });
+    setNewModelId('');
+    setNewModelName('');
+  };
+
+  const removeModel = (id: string) => {
+    updateProvider(provider.id, { models: provider.models.filter((m) => m.id !== id) });
+  };
 
   const handleTest = async () => {
     if (!provider.apiKey.trim()) return;
@@ -222,9 +250,11 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
             </datalist>
           </div>
 
-          {/* Cost table */}
+          {/* Models & pricing */}
           <div>
-            <p className="text-xs font-medium text-gray-500 dark:text-[#6b7280] mb-2">Pricing (per 1K tokens)</p>
+            <p className="text-xs font-medium text-gray-500 dark:text-[#6b7280] mb-2">
+              Models <span className="text-gray-300 dark:text-[#374151] font-normal">· one API key, many models · pricing per 1K tokens</span>
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -233,12 +263,23 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
                     <th className="text-right pb-1.5 font-medium">Input</th>
                     <th className="text-right pb-1.5 font-medium">Output</th>
                     <th className="text-right pb-1.5 font-medium">Context</th>
+                    <th className="pb-1.5 w-8" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-[#161616]">
+                  {provider.models.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-3 text-center text-gray-400 dark:text-[#4b5563]">
+                        No models yet — add one below.
+                      </td>
+                    </tr>
+                  )}
                   {provider.models.map((m) => (
-                    <tr key={m.id}>
-                      <td className="py-1.5 text-gray-700 dark:text-[#d1d5db]">{m.name}</td>
+                    <tr key={m.id} className="group">
+                      <td className="py-1.5 text-gray-700 dark:text-[#d1d5db]">
+                        <span className="font-medium">{m.name}</span>
+                        {m.name !== m.id && <span className="block text-[10px] text-gray-400 dark:text-[#4b5563] font-mono">{m.id}</span>}
+                      </td>
                       <td className="py-1.5 text-right text-gray-500 dark:text-[#6b7280]">
                         {m.costPer1kInput === 0 ? '—' : `$${m.costPer1kInput.toFixed(4)}`}
                       </td>
@@ -246,13 +287,61 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
                         {m.costPer1kOutput === 0 ? '—' : `$${m.costPer1kOutput.toFixed(4)}`}
                       </td>
                       <td className="py-1.5 text-right text-gray-500 dark:text-[#6b7280]">
-                        {m.contextWindow >= 1000000 ? `${(m.contextWindow / 1000000).toFixed(0)}M` : `${(m.contextWindow / 1000).toFixed(0)}K`}
+                        {m.contextWindow >= 1000000
+                          ? `${(m.contextWindow / 1000000).toFixed(0)}M`
+                          : m.contextWindow > 0
+                          ? `${(m.contextWindow / 1000).toFixed(0)}K`
+                          : '—'}
+                      </td>
+                      <td className="py-1.5 text-right">
+                        <button
+                          onClick={() => removeModel(m.id)}
+                          title="Remove model"
+                          className="p-1 rounded text-gray-300 dark:text-[#374151] hover:text-[#b61615] hover:bg-[#b61615]/10 transition opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Add model row */}
+            <div className="flex items-center gap-2 mt-3">
+              <input
+                type="text"
+                value={newModelId}
+                onChange={(e) => setNewModelId(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addModel(); } }}
+                placeholder="Model ID (e.g. google/gemma-3-27b-it:free)"
+                className="flex-1 min-w-0 px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-[#0d0d0d] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#374151] focus:outline-none focus:ring-2 focus:ring-[#b61615]/30 focus:border-[#b61615] transition font-mono"
+              />
+              <input
+                type="text"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addModel(); } }}
+                placeholder="Display name (optional)"
+                className="w-40 flex-shrink-0 px-3 py-2 text-xs rounded-lg border border-gray-200 dark:border-[#2a2a2a] bg-white dark:bg-[#0d0d0d] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-[#374151] focus:outline-none focus:ring-2 focus:ring-[#b61615]/30 focus:border-[#b61615] transition"
+              />
+              <button
+                onClick={addModel}
+                disabled={!newModelId.trim()}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition flex-shrink-0',
+                  newModelId.trim()
+                    ? 'bg-[#b61615]/10 text-[#b61615] hover:bg-[#b61615]/15 border border-[#b61615]/20'
+                    : 'bg-gray-100 dark:bg-[#1a1a1a] text-gray-400 dark:text-[#374151] border border-gray-200 dark:border-[#2a2a2a] cursor-not-allowed'
+                )}
+              >
+                <Plus className="w-3.5 h-3.5" /> Add
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-[#4b5563] mt-2">
+              Added models appear in the Default Model list and the chat model picker. Remember to click <span className="font-medium">Save</span> at the top to persist changes.
+            </p>
           </div>
         </div>
       )}
