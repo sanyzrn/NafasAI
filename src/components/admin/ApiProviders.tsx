@@ -250,63 +250,38 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
             </datalist>
           </div>
 
-          {/* Models & pricing */}
+          {/* Models */}
           <div>
             <p className="text-xs font-medium text-gray-500 dark:text-[#6b7280] mb-2">
-              Models <span className="text-gray-300 dark:text-[#374151] font-normal">· one API key, many models · pricing per 1K tokens</span>
+              Models <span className="text-gray-300 dark:text-[#374151] font-normal">· one API key, many models</span>
             </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-gray-400 dark:text-[#4b5563] border-b border-gray-100 dark:border-[#1a1a1a]">
-                    <th className="text-left pb-1.5 font-medium">Model</th>
-                    <th className="text-right pb-1.5 font-medium">Input</th>
-                    <th className="text-right pb-1.5 font-medium">Output</th>
-                    <th className="text-right pb-1.5 font-medium">Context</th>
-                    <th className="pb-1.5 w-8" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-[#161616]">
-                  {provider.models.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-3 text-center text-gray-400 dark:text-[#4b5563]">
-                        No models yet — add one below.
-                      </td>
-                    </tr>
-                  )}
-                  {provider.models.map((m) => (
-                    <tr key={m.id} className="group">
-                      <td className="py-1.5 text-gray-700 dark:text-[#d1d5db]">
-                        <span className="font-medium">{m.name}</span>
-                        {m.name !== m.id && <span className="block text-[10px] text-gray-400 dark:text-[#4b5563] font-mono">{m.id}</span>}
-                      </td>
-                      <td className="py-1.5 text-right text-gray-500 dark:text-[#6b7280]">
-                        {m.costPer1kInput === 0 ? '—' : `$${m.costPer1kInput.toFixed(4)}`}
-                      </td>
-                      <td className="py-1.5 text-right text-gray-500 dark:text-[#6b7280]">
-                        {m.costPer1kOutput === 0 ? '—' : `$${m.costPer1kOutput.toFixed(4)}`}
-                      </td>
-                      <td className="py-1.5 text-right text-gray-500 dark:text-[#6b7280]">
-                        {m.contextWindow >= 1000000
-                          ? `${(m.contextWindow / 1000000).toFixed(0)}M`
-                          : m.contextWindow > 0
-                          ? `${(m.contextWindow / 1000).toFixed(0)}K`
-                          : '—'}
-                      </td>
-                      <td className="py-1.5 text-right">
-                        <button
-                          onClick={() => removeModel(m.id)}
-                          title="Remove model"
-                          className="p-1 rounded text-gray-300 dark:text-[#374151] hover:text-[#b61615] hover:bg-[#b61615]/10 transition opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+
+            {provider.models.length === 0 ? (
+              <p className="text-xs text-gray-400 dark:text-[#4b5563] py-2">No models yet — add one below.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {provider.models.map((m) => (
+                  <div
+                    key={m.id}
+                    className="group flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-gray-100 dark:border-[#1a1a1a] bg-gray-50/60 dark:bg-[#0d0d0d]"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-700 dark:text-[#d1d5db] truncate">{m.name}</p>
+                      {m.name !== m.id && (
+                        <p className="text-[10px] text-gray-400 dark:text-[#4b5563] font-mono truncate">{m.id}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeModel(m.id)}
+                      title="Remove model"
+                      className="p-1 rounded text-gray-300 dark:text-[#374151] hover:text-[#b61615] hover:bg-[#b61615]/10 transition opacity-0 group-hover:opacity-100 flex-shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Add model row */}
             <div className="flex items-center gap-2 mt-3">

@@ -477,7 +477,7 @@ export default function ChatInterface() {
             )}
           </div>
           <p className="text-xs text-gray-400 dark:text-[#2a2a2a] text-center mt-2">
-            {currentModel?.name ?? aiConfig.model} · {aiConfig.tone} · {currentProvider?.name ?? 'Anthropic'}
+            {currentModel?.name ?? selectedModelId}{currentProvider ? ` · ${currentProvider.name}` : ''}
           </p>
         </div>
       </div>

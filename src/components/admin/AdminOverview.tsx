@@ -47,7 +47,7 @@ function EmptyChart({ label }: { label: string }) {
 }
 
 export default function AdminOverview() {
-  const { users, conversations, aiConfig, loadUsers } = useAppStore();
+  const { users, conversations, selectedModelId, loadUsers } = useAppStore();
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
@@ -90,7 +90,7 @@ export default function AdminOverview() {
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-[#111111] border border-gray-200 dark:border-[#1f1f1f]">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-medium text-gray-600 dark:text-[#9ca3af]">{aiConfig.model}</span>
+            <span className="text-xs font-medium text-gray-600 dark:text-[#9ca3af]">{selectedModelId || 'No model selected'}</span>
           </div>
         </div>
       </div>
