@@ -44,10 +44,11 @@ const DEFAULT_TIME_RESTRICTION: TimeRestriction = {
 
 type ModalForm = Partial<User> & { password?: string };
 
-function UserModal({ user, onClose, onSave }: {
+function UserModal({ user, onClose, onSave, serverError }: {
   user: Partial<User> | null;
   onClose: () => void;
   onSave: (u: User, password?: string) => void;
+  serverError?: string;
 }) {
   const isNew = !user?.id;
   const roleDefaults = useAppStore((s) => s.roles);
@@ -348,8 +349,10 @@ function UserModal({ user, onClose, onSave }: {
             <span className="text-sm text-gray-700 dark:text-[#9ca3af]">Account active</span>
           </div>
 
-          {validationError && (
-            <p className="text-xs text-[#b61615]">{validationError}</p>
+          {(validationError || serverError) && (
+            <div className="px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/15 border border-red-200 dark:border-red-900/30">
+              <p className="text-xs text-[#b61615] dark:text-red-400">{validationError || serverError}</p>
+            </div>
           )}
         </div>
 
@@ -517,14 +520,15 @@ export default function UserManagement() {
           </div>
         </div>
 
-        {saveError && (
+        {/* Page-level error only when no modal is open (e.g. enable/disable from the row menu) */}
+        {saveError && editingUser === undefined && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30">
             <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
           </div>
         )}
 
-        {/* Table */}
-        <div className="border border-gray-100 dark:border-[#1f1f1f] rounded-xl overflow-hidden">
+        {/* Table — overflow-visible so the row action menu can escape the card */}
+        <div className="border border-gray-100 dark:border-[#1f1f1f] rounded-xl">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-[#111111] border-b border-gray-100 dark:border-[#1f1f1f]">
@@ -545,10 +549,12 @@ export default function UserManagement() {
                   </td>
                 </tr>
               )}
-              {filtered.map((user) => {
+              {filtered.map((user, idx) => {
                 const tokenPct = user.dailyTokenLimit > 0 ? Math.round((user.tokensUsed / user.dailyTokenLimit) * 100) : null;
                 const isHigh   = (tokenPct ?? 0) > 80;
                 const hasTimeRestriction = user.timeRestriction?.enabled;
+                // Open the action menu upward for the bottom rows so it isn't clipped.
+                const menuUp = filtered.length > 2 && idx >= filtered.length - 2;
                 return (
                   <tr key={user.id} className="bg-white dark:bg-[#0d0d0d] hover:bg-gray-50 dark:hover:bg-[#111111] transition group">
                     <td className="px-4 py-3.5">
@@ -620,7 +626,10 @@ export default function UserManagement() {
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
                         {menuOpen === user.id && (
-                          <div className="absolute right-0 top-9 z-50 bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-[#2a2a2a] rounded-xl shadow-xl py-1 min-w-[150px]">
+                          <div className={cn(
+                            'absolute right-0 z-50 bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-[#2a2a2a] rounded-xl shadow-xl py-1 min-w-[150px]',
+                            menuUp ? 'bottom-9' : 'top-9'
+                          )}>
                             <button
                               onClick={() => { setSaveError(''); setEditingUser(user); setMenuOpen(null); }}
                               className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-[#d1d5db] hover:bg-gray-50 dark:hover:bg-[#222] transition"
@@ -662,7 +671,7 @@ export default function UserManagement() {
       </div>
 
       {editingUser !== undefined && (
-        <UserModal user={editingUser} onClose={() => setEditingUser(undefined)} onSave={handleSave} />
+        <UserModal user={editingUser} onClose={() => setEditingUser(undefined)} onSave={handleSave} serverError={saveError} />
       )}
       {deletingUser && (
         <DeleteConfirm name={deletingUser.name} onClose={() => setDeletingUser(null)} onConfirm={confirmDelete} />

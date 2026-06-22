@@ -3,6 +3,7 @@ import { Key, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink, Save,
 import { useAppStore, ApiProvider, ProviderId } from '../../store/appStore';
 import { cn } from '../../utils/cn';
 import { apiFetch } from '../../utils/api';
+import toast from 'react-hot-toast';
 
 const PROVIDER_META: Record<ProviderId, { logo: string; docsUrl: string; description: string }> = {
   anthropic: {
@@ -63,10 +64,28 @@ function ProviderCard({ provider }: { provider: ApiProvider }) {
     if (!provider.defaultModel) updateProvider(provider.id, { defaultModel: id });
     setNewModelId('');
     setNewModelName('');
+    persistConfig();
   };
 
   const removeModel = (id: string) => {
     updateProvider(provider.id, { models: provider.models.filter((m) => m.id !== id) });
+    persistConfig();
+  };
+
+  // Persist provider config immediately so model add/remove survives a reload
+  // without needing the top "Save" button. Unchanged keys arrive masked and the
+  // server keeps them, so this never disturbs stored API keys.
+  const persistConfig = async () => {
+    const { providers, selectedProviderId, aiConfig } = useAppStore.getState();
+    try {
+      await apiFetch({
+        action: 'config.save',
+        config: { providers, defaultProviderId: aiConfig?.defaultProviderId || selectedProviderId },
+      });
+      toast.success('Models saved');
+    } catch {
+      /* apiFetch surfaces an error toast on failure */
+    }
   };
 
   const handleTest = async () => {
