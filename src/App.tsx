@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useAuthStore } from './store/authStore';
+import { useAuthStore, applyTheme } from './store/authStore';
 import { useAppStore } from './store/appStore';
 import LoginPage from './components/LoginPage';
 import Layout from './components/Layout';
@@ -11,11 +11,7 @@ export default function App() {
   const prevAuthRef = useRef(isAuthenticated);
 
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    applyTheme(theme);
   }, [theme]);
 
   useEffect(() => {

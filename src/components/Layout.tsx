@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, Plus, Sun, Moon, AlertTriangle, X } from 'lucide-react';
+import { Menu, Plus, Sun, Moon, MoonStar, AlertTriangle, X } from 'lucide-react';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
 import ChatInterface from './chat/ChatInterface';
@@ -100,8 +100,9 @@ function MobileHeader({ onOpen }: { onOpen: () => void }) {
           className="p-2 rounded-xl text-gray-400 dark:text-white/40
             hover:bg-gray-100 dark:hover:bg-white/10 active:scale-95 transition"
           aria-label="Toggle theme"
+          title={`Theme: ${theme}`}
         >
-          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {theme === 'light' ? <Sun className="w-4 h-4" /> : theme === 'dark' ? <Moon className="w-4 h-4" /> : <MoonStar className="w-4 h-4" />}
         </button>
         {activeView === 'chat' && (
           <button

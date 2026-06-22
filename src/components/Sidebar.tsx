@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   MessageSquare,
-  FolderOpen,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +9,7 @@ import {
   LogOut,
   Sun,
   Moon,
+  MoonStar,
   Shield,
   Lock,
   MoreHorizontal,
@@ -354,9 +354,9 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
               className="p-1.5 rounded-md text-gray-400 dark:text-[#4b5563]
                 hover:text-gray-600 dark:hover:text-[#9ca3af]
                 hover:bg-gray-100 dark:hover:bg-white/5 transition"
-              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              title={`Theme: ${theme} (click to switch)`}
             >
-              {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              {theme === 'light' ? <Sun className="w-3.5 h-3.5" /> : theme === 'dark' ? <Moon className="w-3.5 h-3.5" /> : <MoonStar className="w-3.5 h-3.5" />}
             </button>
             <button
               onClick={logout}
