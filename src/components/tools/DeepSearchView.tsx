@@ -249,7 +249,7 @@ export default function DeepSearchView() {
               <Search className="w-10 h-10 text-gray-200 dark:text-[#1f1f1f] mx-auto mb-3" />
               <p className="text-sm font-medium text-gray-400 dark:text-[#4b5563]">Enter a query to start researching</p>
               <p className="text-xs text-gray-300 dark:text-[#2a2a2a] mt-1">
-                Claude synthesizes knowledge across topics and domains
+                The AI synthesizes knowledge across topics and domains
               </p>
             </div>
           )}

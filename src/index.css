@@ -34,6 +34,83 @@ body {
   color: #f4f4f5;
 }
 
+/* ─────────────────────────── Midnight (navy) theme ───────────────────────────
+   <html> carries both `dark` and `midnight`, so every dark: utility still applies
+   and we only remap the neutral palette to a deep navy with brighter, more
+   readable text. The signature red accent is intentionally preserved. */
+.midnight body {
+  background-color: #0a0f1e;
+  background-image:
+    radial-gradient(ellipse 130% 60% at 50% -10%, rgba(86, 112, 210, 0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(60, 82, 160, 0.12) 0%, transparent 55%);
+  color: #e7eaf3;
+}
+
+/* Backgrounds */
+.midnight .dark\:bg-\[\#050505\] { background-color: #070a14; }
+.midnight .dark\:bg-\[\#080808\] { background-color: #080c17; }
+.midnight .dark\:bg-\[\#0a0a0a\],
+.midnight .bg-\[\#0a0a0a\]       { background-color: #0a0f1e; }
+.midnight .dark\:bg-\[\#0d0d0d\] { background-color: #0c1322; }
+.midnight .dark\:bg-\[\#0e0e0e\] { background-color: #0d1526; }
+.midnight .dark\:bg-\[\#0f0f0f\] { background-color: #0e1627; }
+.midnight .dark\:bg-\[\#111111\],
+.midnight .bg-\[\#111111\]       { background-color: #111a2e; }
+.midnight .dark\:bg-\[\#161616\] { background-color: #16203a; }
+.midnight .dark\:bg-\[\#1a1a1a\],
+.midnight .bg-\[\#1a1a1a\]       { background-color: #1a2540; }
+.midnight .dark\:bg-\[\#1f1f1f\] { background-color: #1e2a47; }
+.midnight .dark\:bg-\[\#2a2a2a\] { background-color: #2b3a5e; }
+.midnight .dark\:bg-\[\#4b5563\] { background-color: #5b6a8f; }
+
+/* Borders */
+.midnight .dark\:border-\[\#161616\] { border-color: #16203a; }
+.midnight .dark\:border-\[\#1a1a1a\] { border-color: #1c2744; }
+.midnight .dark\:border-\[\#1f1f1f\] { border-color: #202c4a; }
+.midnight .dark\:border-\[\#2a2a2a\],
+.midnight .border-\[\#2a2a2a\]       { border-color: #2c3c61; }
+
+/* Text — brightened for readability */
+.midnight .dark\:text-\[\#1f1f1f\] { color: #2b3a5e; }
+.midnight .dark\:text-\[\#2a2a2a\] { color: #3b486b; }
+.midnight .dark\:text-\[\#374151\] { color: #586089; }
+.midnight .dark\:text-\[\#4b5563\] { color: #8089a6; }
+.midnight .dark\:text-\[\#6b7280\] { color: #9aa3bf; }
+.midnight .dark\:text-\[\#9ca3af\] { color: #bdc5dd; }
+.midnight .dark\:text-\[\#d1d5db\] { color: #e0e4f1; }
+.midnight .dark\:text-\[\#e5e7eb\] { color: #eef1f9; }
+
+/* Placeholders */
+.midnight .dark\:placeholder-\[\#374151\]::placeholder { color: #4e567a; }
+.midnight .dark\:placeholder-\[\#4b5563\]::placeholder { color: #6c769b; }
+
+/* Divider lines */
+.midnight .dark\:divide-\[\#1a1a1a\] > :not([hidden]) ~ :not([hidden]) { border-color: #1c2744; }
+.midnight .dark\:divide-\[\#161616\] > :not([hidden]) ~ :not([hidden]) { border-color: #16203a; }
+
+/* Hover backgrounds */
+.midnight .dark\:hover\:bg-\[\#111111\]:hover { background-color: #111a2e; }
+.midnight .dark\:hover\:bg-\[\#141414\]:hover { background-color: #141d33; }
+.midnight .dark\:hover\:bg-\[\#161616\]:hover { background-color: #16203a; }
+.midnight .dark\:hover\:bg-\[\#1a1a1a\]:hover { background-color: #1a2540; }
+.midnight .dark\:hover\:bg-\[\#2a2a2a\]:hover { background-color: #2b3a5e; }
+
+/* Hover text */
+.midnight .dark\:hover\:text-\[\#9ca3af\]:hover { color: #bdc5dd; }
+.midnight .dark\:hover\:text-\[\#d1d5db\]:hover { color: #e0e4f1; }
+
+/* Hover borders */
+.midnight .dark\:hover\:border-\[\#2a2a2a\]:hover { border-color: #2c3c61; }
+.midnight .dark\:hover\:border-\[\#3a3a3a\]:hover { border-color: #3c4d72; }
+
+/* Scrollbars, range, code, shimmer */
+.midnight ::-webkit-scrollbar-thumb { background: #2b3a5e; }
+.midnight ::-webkit-scrollbar-thumb:hover { background: #3c4d72; }
+.midnight input[type='range'] { background: #2b3a5e; }
+.midnight .prose-chat code { background: #1a2540; }
+.midnight .prose-chat pre { background: #0c1322; border-color: #202c4a; }
+.midnight .shimmer { background: linear-gradient(90deg, #16203a 25%, #233158 50%, #16203a 75%); }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

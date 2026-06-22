@@ -3,6 +3,15 @@ import { persist } from 'zustand/middleware';
 
 export type UserRole = 'admin' | 'manager' | 'employee';
 
+export type Theme = 'light' | 'dark' | 'midnight';
+
+/** Apply the chosen theme to <html>. `midnight` builds on top of `dark`. */
+export function applyTheme(theme: Theme): void {
+  const root = document.documentElement;
+  root.classList.toggle('dark', theme === 'dark' || theme === 'midnight');
+  root.classList.toggle('midnight', theme === 'midnight');
+}
+
 export type Permission =
   | 'chat'
   | 'image_generation'
@@ -47,11 +56,12 @@ interface AuthState {
   currentUser: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  theme: 'light' | 'dark';
+  theme: Theme;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateUser: (data: Partial<User>) => void;
   toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -85,14 +95,16 @@ export const useAuthStore = create<AuthState>()(
 
       toggleTheme: () => {
         set((state) => {
-          const newTheme = state.theme === 'light' ? 'dark' : 'light';
-          if (newTheme === 'dark') {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
+          const order: Theme[] = ['light', 'dark', 'midnight'];
+          const newTheme = order[(order.indexOf(state.theme) + 1) % order.length];
+          applyTheme(newTheme);
           return { theme: newTheme };
         });
+      },
+
+      setTheme: (theme) => {
+        applyTheme(theme);
+        set({ theme });
       },
     }),
     {
@@ -104,12 +116,7 @@ export const useAuthStore = create<AuthState>()(
         theme: state.theme,
       }),
       onRehydrateStorage: () => (state) => {
-        const theme = state?.theme ?? 'light';
-        if (theme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
+        applyTheme(state?.theme ?? 'light');
       },
     }
   )

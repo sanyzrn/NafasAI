@@ -1,6 +1,37 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
+import { Eye, EyeOff, Loader2, ArrowRight, Sun, Moon, MoonStar } from 'lucide-react';
+import { useAuthStore, Theme } from '../store/authStore';
+
+const THEME_OPTIONS: { id: Theme; label: string; icon: React.ElementType }[] = [
+  { id: 'light',    label: 'Light',    icon: Sun },
+  { id: 'dark',     label: 'Dark',     icon: Moon },
+  { id: 'midnight', label: 'Midnight', icon: MoonStar },
+];
+
+function ThemeSwitcher() {
+  const { theme, setTheme } = useAuthStore();
+  return (
+    <div className="flex items-center gap-1 p-1 rounded-full border border-gray-200 dark:border-[#1f1f1f] bg-white/70 dark:bg-[#111111]/70 backdrop-blur">
+      {THEME_OPTIONS.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setTheme(id)}
+          title={label}
+          aria-label={`${label} theme`}
+          className={
+            'w-8 h-8 rounded-full flex items-center justify-center transition ' +
+            (theme === id
+              ? 'bg-[#b61615] text-white shadow-sm'
+              : 'text-gray-400 dark:text-[#6b7280] hover:text-gray-600 dark:hover:text-[#9ca3af] hover:bg-gray-100 dark:hover:bg-white/5')
+          }
+        >
+          <Icon className="w-4 h-4" />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -91,6 +122,11 @@ export default function LoginPage() {
 
       {/* Right Panel — Form */}
       <div className="flex-1 flex flex-col p-6 sm:p-12 relative">
+        {/* Theme switcher */}
+        <div className="absolute top-5 right-5 z-20">
+          <ThemeSwitcher />
+        </div>
+
         <div className="flex-1 flex items-center justify-center w-full">
           <div className="w-full max-w-sm">
             {/* Mobile logo */}
