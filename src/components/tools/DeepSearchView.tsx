@@ -79,8 +79,10 @@ export default function DeepSearchView() {
 
       setSearchTime(parseFloat(((Date.now() - start) / 1000).toFixed(1)));
       const data = await res.json();
+      const fallbackMessage = aiConfig.errorMessage?.trim() || 'Sorry, something went wrong. Please try again in a moment.';
       if (!res.ok || data.error) {
-        setError(data.error ?? 'Research failed. Please try again.');
+        // Real cause is logged server-side; the user sees the friendly message.
+        setError(fallbackMessage);
       } else {
         const result = data.content ?? '';
         setSynthesis(result);
@@ -88,7 +90,7 @@ export default function DeepSearchView() {
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      setError('Connection failed. Check your API configuration.');
+      setError(aiConfig.errorMessage?.trim() || 'Sorry, something went wrong. Please try again in a moment.');
     } finally {
       setLoading(false);
     }

@@ -1170,7 +1170,7 @@ function handleConfigSave(array $body): void {
         'providers', 'systemPrompt', 'model', 'temperature', 'maxTokens',
         'tone', 'verbosity', 'streamResponses', 'logConversations',
         'retentionDays', 'allowDataExport', 'apiKey', 'platformName', 'companyName',
-        'defaultProviderId', 'toolAccess', 'roles'
+        'defaultProviderId', 'toolAccess', 'roles', 'errorMessage'
     ];
 
     // Handle provider apiKeys encryption and masking

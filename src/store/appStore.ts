@@ -104,6 +104,7 @@ export interface AIConfig {
   platformName: string;
   companyName: string;
   defaultProviderId?: string;
+  errorMessage: string;
 }
 
 interface AppState {
@@ -172,6 +173,7 @@ const DEFAULT_AI_CONFIG: AIConfig = {
   platformName: 'Nafas AI',
   companyName: 'Nafas Zist Pharmed',
   defaultProviderId: 'anthropic',
+  errorMessage: 'Sorry, I ran into a problem generating a response. Please try again in a moment. If this keeps happening, contact your administrator.',
 };
 
 const DEFAULT_PROVIDERS: ApiProvider[] = [

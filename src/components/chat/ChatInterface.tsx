@@ -181,6 +181,7 @@ export default function ChatInterface() {
     apiMessages: { role: string; content: string }[],
     conversationTitle: string,
   ) => {
+    const fallbackMessage = aiConfig.errorMessage?.trim() || 'Sorry, something went wrong. Please try again in a moment.';
     setIsGenerating(true);
     setIsTyping(true);
     abortControllerRef.current = new AbortController();
@@ -205,10 +206,9 @@ export default function ChatInterface() {
       setIsTyping(false);
 
       if (!res.ok) {
-        addMessage(convId, {
-          role: 'assistant',
-          content: `⚠️ ${data.error ?? 'An error occurred. Please try again.'}`,
-        });
+        // The real cause is recorded server-side (Admin → System Logs). The end
+        // user only sees the admin-configurable apology message.
+        addMessage(convId, { role: 'assistant', content: fallbackMessage });
       } else {
         addMessage(convId, {
           role: 'assistant',
@@ -221,10 +221,7 @@ export default function ChatInterface() {
       if (err instanceof DOMException && err.name === 'AbortError') {
         // User stopped generation — no error message needed
       } else {
-        addMessage(convId, {
-          role: 'assistant',
-          content: '⚠️ Connection error. Ensure api.php is deployed and config.php is configured.',
-        });
+        addMessage(convId, { role: 'assistant', content: fallbackMessage });
       }
     } finally {
       setIsGenerating(false);
