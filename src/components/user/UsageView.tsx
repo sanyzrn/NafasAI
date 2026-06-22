@@ -1,9 +1,6 @@
-import { Activity, Zap, DollarSign, MessageSquare, TrendingUp, Clock, Key, Shield } from 'lucide-react';
+import { Activity, Zap, DollarSign, MessageSquare, TrendingUp, Clock, Key } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
-import { useState } from 'react';
-import { apiFetch } from '../../utils/api';
-import toast from 'react-hot-toast';
 
 function UsageBar({ label, used, limit, unit }: { label: string; used: number; limit: number; unit: string }) {
   const isUnlimited = limit < 0;
